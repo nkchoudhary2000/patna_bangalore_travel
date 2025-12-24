@@ -1,13 +1,15 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import GalleryView from './components/GalleryView';
 import MapDisplay from './components/MapDisplay';
 import TripFeed from './components/TripFeed';
 import AdminPanel from './components/AdminPanel';
 import CommentSection from './components/CommentSection';
-import { Map, LayoutDashboard, MessageSquare } from 'lucide-react';
+import { Map, LayoutDashboard, MessageSquare, Camera } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
 function App() {
+    console.log("App Version 2 Loaded");
     return (
         <Router>
             <div className="flex h-screen w-screen bg-dark-900 text-white overflow-hidden font-sans">
@@ -15,6 +17,7 @@ function App() {
 
                 <Routes>
                     <Route path="/admin" element={<AdminPanel />} />
+                    <Route path="/gallery" element={<GalleryView />} />
                     <Route path="/" element={
                         <div className="relative w-full h-full flex flex-col md:flex-row">
                             {/* Map Container - Full Screen on Mobile, Flexible on Desktop */}
@@ -29,7 +32,10 @@ function App() {
                                         Patna ➜ Bangalore
                                     </h1>
                                     <div className="flex gap-2">
-                                        <Link to="/admin" className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                                        <Link to="/gallery" className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Gallery">
+                                            <Camera size={18} className="text-gray-400" />
+                                        </Link>
+                                        <Link to="/admin" className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Admin">
                                             <LayoutDashboard size={18} className="text-gray-400" />
                                         </Link>
                                     </div>

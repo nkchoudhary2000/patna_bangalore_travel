@@ -160,7 +160,7 @@ const AdminPanel = () => {
 
     if (!user) {
         return (
-            <div className="h-screen w-screen flex items-center justify-center bg-dark-900">
+            <div className="min-h-screen w-full flex items-center justify-center bg-dark-900 p-4 overflow-y-auto">
                 <div className="p-8 bg-dark-800 rounded-2xl border border-white/10 text-center max-w-sm w-full">
                     <Lock className="mx-auto mb-4 text-purple-400" size={48} />
                     <h2 className="text-xl font-bold mb-2">Admin Access</h2>
@@ -309,7 +309,7 @@ const AdminPanel = () => {
                                         value={formData.mediaUrl}
                                         onChange={e => setFormData({ ...formData, mediaUrl: e.target.value })}
                                         className="w-full bg-dark-900 border border-white/10 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        placeholder={formData.mediaType === 'video' ? "https://drive.google.com/file/d/... (Video)" : "https://drive.google.com/..."}
+                                        placeholder={formData.mediaType === 'video' ? "https://drive.google.com/file/d/... (Video)" : "https://drive.google.com/... or Google Photos Link"}
                                     />
                                     <p className="text-[10px] text-gray-500">Make sure link has "Anyone with link" access.</p>
                                 </div>
