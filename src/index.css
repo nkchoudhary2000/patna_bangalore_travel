@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-dark-900 text-white overflow-hidden;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Leaflet Override for Dark Mode */
+.leaflet-container {
+  background: #242f3e !important;
+}

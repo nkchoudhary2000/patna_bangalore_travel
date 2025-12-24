@@ -1,0 +1,52 @@
+type User @table {
+  displayName: String!
+  createdAt: Timestamp!
+  email: String
+  photoUrl: String
+  bio: String
+}
+
+type RoadTrip @table {
+  user: User!
+  name: String!
+  origin: String!
+  destination: String!
+  startDate: Date!
+  createdAt: Timestamp!
+  endDate: Date
+  description: String
+  totalDistance: Float
+}
+
+type Segment @table {
+  roadTrip: RoadTrip!
+  segmentName: String!
+  segmentNumber: Int!
+  startDate: Date!
+  distanceCovered: Float!
+  endDate: Date
+  notes: String
+  vehicleUsed: String
+}
+
+type PointOfInterest @table {
+  segment: Segment!
+  poiName: String!
+  location: String!
+  latitude: Float!
+  longitude: Float!
+  description: String
+  visitedDate: Date
+  featured: Boolean
+}
+
+type Media @table {
+  pointOfInterest: PointOfInterest
+  segment: Segment
+  mediaUrl: String!
+  mediaType: String!
+  uploadDate: Timestamp!
+  caption: String
+  category: String
+  thumbnailUrl: String
+}
