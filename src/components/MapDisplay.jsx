@@ -114,6 +114,17 @@ const MapDisplay = () => {
                                     </div>
                                 )}
                                 <p className="text-xs line-clamp-3">{update.message}</p>
+                                {update.aqi && (
+                                    <div className="mt-1 text-[10px] font-bold">
+                                        AQI: <span className={
+                                            update.aqi <= 50 ? 'text-green-600' :
+                                                update.aqi <= 100 ? 'text-yellow-600' :
+                                                    update.aqi <= 150 ? 'text-orange-600' :
+                                                        update.aqi <= 200 ? 'text-red-600' :
+                                                            'text-purple-600'
+                                        }>{update.aqi}</span>
+                                    </div>
+                                )}
                             </div>
                         </Popup>
                     </Marker>

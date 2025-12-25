@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 
@@ -186,53 +187,56 @@ const MediaCarousel = ({ mediaItems = [] }) => {
                 )}
             </div>
 
-            {/* Full Screen Modal */}
-            <AnimatePresence>
-                {isFullScreen && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[1000] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
-                        onClick={() => setIsFullScreen(false)}
-                    >
-                        <div className="relative w-full h-full max-w-7xl flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                            {/* Close Button */}
-                            <button
-                                onClick={() => setIsFullScreen(false)}
-                                className="absolute top-4 right-4 text-white hover:text-red-400 z-50 p-2 bg-black/50 rounded-full"
-                            >
-                                <ChevronRight className="rotate-90" size={32} /> {/* Using rotated chevron as helper or LogOut/X if available, sticking to available icons */}
-                            </button>
+            {/* Full Screen Modal - Portaled to Body */}
+            {createPortal(
+                <AnimatePresence>
+                    {isFullScreen && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[99999] bg-black/95 backdrop-blur-md flex items-center justify-center p-4"
+                            onClick={() => setIsFullScreen(false)}
+                        >
+                            <div className="relative w-full h-full max-w-7xl flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                                {/* Close Button */}
+                                <button
+                                    onClick={() => setIsFullScreen(false)}
+                                    className="absolute top-4 right-4 text-white hover:text-red-400 z-50 p-2 bg-black/50 rounded-full"
+                                >
+                                    <ChevronRight className="rotate-90" size={32} />
+                                </button>
 
-                            {currentItem.type === 'video' ? (
-                                currentItem.url && currentItem.url.includes('drive.google.com') ? (
-                                    <iframe
-                                        src={getIframeSrc(currentItem.url)}
-                                        className="w-full h-full rounded-xl"
-                                        allow="autoplay; fullscreen"
-                                        title="Video Player Full"
-                                    ></iframe>
+                                {currentItem.type === 'video' ? (
+                                    currentItem.url && currentItem.url.includes('drive.google.com') ? (
+                                        <iframe
+                                            src={getIframeSrc(currentItem.url)}
+                                            className="w-full h-full rounded-xl"
+                                            allow="autoplay; fullscreen"
+                                            title="Video Player Full"
+                                        ></iframe>
+                                    ) : (
+                                        <video
+                                            src={currentItem.url}
+                                            controls
+                                            className="w-full h-full object-contain rounded-xl"
+                                            autoPlay
+                                        />
+                                    )
                                 ) : (
-                                    <video
+                                    <img
                                         src={currentItem.url}
-                                        controls
-                                        className="w-full h-full object-contain rounded-xl"
-                                        autoPlay
+                                        alt="Full screen view"
+                                        className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+                                        referrerPolicy="no-referrer"
                                     />
-                                )
-                            ) : (
-                                <img
-                                    src={currentItem.url}
-                                    alt="Full screen view"
-                                    className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
-                                    referrerPolicy="no-referrer"
-                                />
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>,
+                document.body
+            )}
         </>
     );
 };

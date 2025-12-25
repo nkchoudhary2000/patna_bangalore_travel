@@ -16,7 +16,9 @@ const AdminPanel = () => {
         cost: '',
         costCategory: 'Petrol',
         coords: null,
-        locationName: ''
+
+        locationName: '',
+        aqi: ''
     });
     const [editingId, setEditingId] = useState(null);
     const [status, setStatus] = useState('');
@@ -71,6 +73,17 @@ const AdminPanel = () => {
                         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
                         const data = await res.json();
                         address = data.address.city || data.address.town || data.address.village || data.display_name.split(',')[0];
+
+                        // Fetch AQI
+                        try {
+                            const aqiRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
+                            const aqiData = await aqiRes.json();
+                            if (aqiData.current && aqiData.current.us_aqi) {
+                                setFormData(prev => ({ ...prev, aqi: aqiData.current.us_aqi }));
+                            }
+                        } catch (aqiErr) {
+                            console.error("AQI fetch failed", aqiErr);
+                        }
                     } catch (e) {
                         console.error("Reverse geocode failed", e);
                     }
@@ -104,7 +117,8 @@ const AdminPanel = () => {
                 cost: Number(formData.cost) || 0,
                 costCategory: formData.costCategory,
                 coordinates: formData.coords,
-                locationName: formData.locationName
+                locationName: formData.locationName,
+                aqi: formData.aqi ? Number(formData.aqi) : null
             };
 
             // Only set timestamp on creation to preserve original time
@@ -121,7 +135,7 @@ const AdminPanel = () => {
                 setStatus("Success! Posted.");
             }
 
-            setFormData({ ...formData, message: '', mediaUrl: '', cost: '', locationName: '' });
+            setFormData({ ...formData, message: '', mediaUrl: '', cost: '', locationName: '', aqi: '' });
         } catch (err) {
             console.error(err);
             setStatus("Error saving update.");
@@ -137,7 +151,8 @@ const AdminPanel = () => {
             cost: update.cost || '',
             costCategory: update.costCategory || 'Petrol',
             coords: update.coordinates,
-            locationName: update.locationName || ''
+            locationName: update.locationName || '',
+            aqi: update.aqi || ''
         });
         setEditingId(update.id);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -155,7 +170,7 @@ const AdminPanel = () => {
 
     const handleCancelEdit = () => {
         setEditingId(null);
-        setFormData({ ...formData, message: '', mediaUrl: '', cost: '', locationName: '' });
+        setFormData({ ...formData, message: '', mediaUrl: '', cost: '', locationName: '', aqi: '' });
     };
 
     if (!user) {
@@ -268,6 +283,33 @@ const AdminPanel = () => {
                                         placeholder="e.g. Nagpur Highway, Hotel X..."
                                     />
                                 </div>
+
+                                <div className="mt-3">
+                                    <label className="text-[10px] text-gray-500 block mb-1">AQI (US)</label>
+                                    <div className="flex gap-2 items-center">
+                                        <input
+                                            type="number"
+                                            value={formData.aqi || ''}
+                                            onChange={e => setFormData({ ...formData, aqi: e.target.value })}
+                                            className="w-full bg-dark-900 border border-white/10 rounded p-2 text-sm text-white"
+                                            placeholder="Air Quality Index"
+                                        />
+                                        {formData.aqi && (
+                                            <div className={`px-3 py-1 rounded text-xs font-bold ${formData.aqi <= 50 ? 'bg-green-500/20 text-green-400' :
+                                                formData.aqi <= 100 ? 'bg-yellow-500/20 text-yellow-400' :
+                                                    formData.aqi <= 150 ? 'bg-orange-500/20 text-orange-400' :
+                                                        formData.aqi <= 200 ? 'bg-red-500/20 text-red-400' :
+                                                            'bg-purple-500/20 text-purple-400'
+                                                }`}>
+                                                {formData.aqi <= 50 ? 'Good' :
+                                                    formData.aqi <= 100 ? 'Moderate' :
+                                                        formData.aqi <= 150 ? 'Sensitive' :
+                                                            formData.aqi <= 200 ? 'Unhealthy' :
+                                                                'Hazardous'}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="space-y-4">
@@ -355,10 +397,10 @@ const AdminPanel = () => {
                             {status && <div className="text-center text-sm text-gray-400 animate-pulse">{status}</div>}
                         </form>
                     </div>
-                </div>
+                </div >
 
                 {/* Right Column: Updates Table */}
-                <div className="lg:col-span-8">
+                < div className="lg:col-span-8" >
                     <h3 className="text-lg font-bold mb-4 text-gray-300">All Updates ({recentUpdates.length})</h3>
                     <div className="bg-dark-800 rounded-xl border border-white/10 overflow-hidden sticky top-6">
                         <div className="overflow-x-auto max-h-[85vh] overflow-y-auto">
@@ -423,9 +465,9 @@ const AdminPanel = () => {
                     <div className="mt-8 text-center pb-10 lg:text-left">
                         <button onClick={() => navigate('/')} className="text-gray-500 text-sm hover:text-white underline">Back to Public View</button>
                     </div>
-                </div>
-            </div>
-        </div>
+                </div >
+            </div >
+        </div >
     );
 };
 

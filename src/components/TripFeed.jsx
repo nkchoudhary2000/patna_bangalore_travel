@@ -107,6 +107,19 @@ const TripFeed = () => {
                                 </span>
                             </div>
                         )}
+
+                        {post.aqi && (
+                            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-dark-900/50 border border-white/5 mr-2">
+                                <span className={`text-[10px] font-bold ${post.aqi <= 50 ? 'text-green-400' :
+                                        post.aqi <= 100 ? 'text-yellow-400' :
+                                            post.aqi <= 150 ? 'text-orange-400' :
+                                                post.aqi <= 200 ? 'text-red-400' :
+                                                    'text-purple-400'
+                                    }`}>
+                                    AQI {post.aqi}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </motion.div>
             ))}
