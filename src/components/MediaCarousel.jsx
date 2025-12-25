@@ -113,29 +113,51 @@ const MediaCarousel = ({ mediaItems = [] }) => {
                                 />
                             )
                         ) : (
-                            <img
-                                src={currentItem.url}
-                                alt="Trip update"
-                                className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
-                                onError={(e) => {
-                                    e.target.onerror = null;
-                                    e.target.src = 'https://placehold.co/600x400/000000/FFF?text=Image+Load+Error';
-                                }}
-                            />
+                            // Image / Photos Logic
+                            currentItem.url && currentItem.url.includes('photos.app.goo.gl') ? (
+                                <div className="w-full h-full bg-dark-800 flex flex-col items-center justify-center p-4 text-center cursor-pointer hover:bg-dark-700 transition"
+                                    onClick={() => window.open(currentItem.url, '_blank')}
+                                >
+                                    <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-2">
+                                        <Maximize2 className="text-blue-400" />
+                                    </div>
+                                    <h3 className="text-white font-bold mb-1">Google Photos Link</h3>
+                                    <p className="text-xs text-gray-400">Cannot embed directly.<br />Click to view album.</p>
+                                </div>
+                            ) : (
+                                <img
+                                    src={currentItem.url}
+                                    alt="Trip update"
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                        // Fallback for broken links (often expired drive links or restricted photos)
+                                        e.target.style.display = 'none';
+                                        e.target.parentElement.innerHTML = `
+                                        <div class="w-full h-full bg-dark-800 flex flex-col items-center justify-center p-4 text-center">
+                                            <p class="text-xs text-red-400 mb-2">Image Failed to Load</p>
+                                            <a href="${currentItem.url}" target="_blank" class="px-3 py-1 bg-white/10 rounded text-xs text-white hover:bg-white/20">
+                                                Open Link
+                                            </a>
+                                        </div>`;
+                                    }}
+                                />
+                            )
                         )}
 
-                        {/* Expand Button - Explicit Action */}
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setIsFullScreen(true);
-                            }}
-                            className="absolute top-2 right-2 p-2 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 hover:text-blue-400 z-10"
-                            title="View Full Screen"
-                        >
-                            <Maximize2 size={24} />
-                        </button>
+                        {/* Expand Button - Explicit Action (Only for non-placeholder) */}
+                        {!currentItem.url.includes('photos.app.goo.gl') && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsFullScreen(true);
+                                }}
+                                className="absolute top-2 right-2 p-2 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 hover:text-blue-400 z-10"
+                                title="View Full Screen"
+                            >
+                                <Maximize2 size={24} />
+                            </button>
+                        )}
                     </motion.div>
                 </AnimatePresence>
 

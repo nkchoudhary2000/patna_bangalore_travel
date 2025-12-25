@@ -30,8 +30,16 @@ const TripFeed = () => {
         }
     };
 
+    const totalCost = updates.reduce((acc, curr) => acc + (Number(curr.cost) || 0), 0);
+
     return (
         <div className="flex flex-col gap-6 p-4">
+            {/* Total Expense Summary */}
+            <div className="bg-gradient-to-r from-green-900/40 to-emerald-900/40 border border-green-500/20 rounded-xl p-4 flex justify-between items-center shadow-lg">
+                <span className="text-sm text-green-200 font-medium">Total Trip Expense</span>
+                <span className="text-xl font-bold text-green-400 font-mono">₹{totalCost.toLocaleString()}</span>
+            </div>
+
             {updates.length === 0 && (
                 <div className="text-center text-gray-500 py-10">
                     <p>No updates yet. The journey begins soon!</p>

@@ -54,37 +54,8 @@ const CommentSection = () => {
                 <MessageCircle size={14} /> Guestbook
             </h3>
 
-            {/* Comment List */}
-            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-                {comments.map((comment) => (
-                    <motion.div
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        key={comment.id}
-                        className="flex gap-3 items-start"
-                    >
-                        {comment.photoURL ? (
-                            <img src={comment.photoURL} alt={comment.user} className="w-8 h-8 rounded-full border border-white/10" />
-                        ) : (
-                            <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
-                                <UserIcon size={14} />
-                            </div>
-                        )}
-                        <div className="flex-1 bg-white/5 p-3 rounded-lg rounded-tl-none border border-white/5">
-                            <div className="flex justify-between items-baseline mb-1">
-                                <span className="text-sm font-semibold text-gray-200">{comment.user}</span>
-                                <span className="text-[10px] text-gray-500">
-                                    {comment.timestamp?.toDate().toLocaleDateString()}
-                                </span>
-                            </div>
-                            <p className="text-xs text-gray-300">{comment.message}</p>
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
-
-            {/* Input Area */}
-            <div className="mt-2">
+            {/* Input Area (Moved to Top) */}
+            <div className="mb-2">
                 {user ? (
                     <form onSubmit={handleSubmit} className="flex gap-2">
                         <input
@@ -112,6 +83,35 @@ const CommentSection = () => {
                         Sign in to leave a message
                     </button>
                 )}
+            </div>
+
+            {/* Comment List */}
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                {comments.map((comment) => (
+                    <motion.div
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        key={comment.id}
+                        className="flex gap-3 items-start"
+                    >
+                        {comment.photoURL ? (
+                            <img src={comment.photoURL} alt={comment.user} className="w-8 h-8 rounded-full border border-white/10" />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
+                                <UserIcon size={14} />
+                            </div>
+                        )}
+                        <div className="flex-1 bg-white/5 p-3 rounded-lg rounded-tl-none border border-white/5">
+                            <div className="flex justify-between items-baseline mb-1">
+                                <span className="text-sm font-semibold text-gray-200">{comment.user}</span>
+                                <span className="text-[10px] text-gray-500">
+                                    {comment.timestamp?.toDate().toLocaleDateString()}
+                                </span>
+                            </div>
+                            <p className="text-xs text-gray-300">{comment.message}</p>
+                        </div>
+                    </motion.div>
+                ))}
             </div>
         </div>
     );
