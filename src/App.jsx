@@ -44,7 +44,7 @@ function App() {
                             {!isMobileMenuOpen && (
                                 <button
                                     onClick={() => setIsMobileMenuOpen(true)}
-                                    className="md:hidden absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-bounce"
+                                    className="md:hidden absolute bottom-16 left-1/2 -translate-x-1/2 z-20 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-bounce"
                                 >
                                     <ChevronUp size={20} />
                                     <span className="font-bold text-sm">View Updates</span>
