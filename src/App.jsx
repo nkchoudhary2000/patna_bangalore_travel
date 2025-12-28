@@ -44,7 +44,7 @@ function App() {
                             {!isMobileMenuOpen && (
                                 <button
                                     onClick={() => setIsMobileMenuOpen(true)}
-                                    className="md:hidden absolute bottom-0 left-1/2 -translate-x-1/2 z-20 bg-dark-900/90 backdrop-blur-md border-t border-x border-white/10 text-white px-10 py-8 rounded-t-2xl shadow-[0_-5px_20px_rgba(0,0,0,0.5)] flex items-center gap-3 transition-transform hover:-translate-y-1"
+                                    className="md:hidden absolute top-0 left-1/2 -translate-x-1/2 z-20 bg-dark-900/90 backdrop-blur-md border-b border-x border-white/10 text-white px-8 py-3 rounded-b-2xl shadow-[0_5px_20px_rgba(0,0,0,0.5)] flex items-center gap-3 transition-transform hover:translate-y-1"
                                 >
                                     <div className="relative flex h-3 w-3">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -52,15 +52,15 @@ function App() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="font-bold text-sm tracking-wide">View Updates</span>
-                                        <ChevronUp size={18} className="text-blue-400" />
+                                        <ChevronDown size={18} className="text-blue-400" />
                                     </div>
                                 </button>
                             )}
 
-                            {/* Sidebar Feed - Drawer on Mobile, Side Panel on Desktop */}
+                            {/* Sidebar Feed - Curtain Drop on Mobile, Side Panel on Desktop */}
                             <div className={`
-                                absolute inset-x-0 bottom-0 z-30 w-full bg-dark-800/95 backdrop-blur-md border-t md:border-t-0 md:border-l border-white/10 shadow-2xl transition-all duration-500 ease-in-out flex flex-col
-                                ${isMobileMenuOpen ? 'h-[100dvh] top-0' : 'h-0 overflow-hidden'} 
+                                absolute inset-x-0 top-0 z-30 w-full bg-dark-800/95 backdrop-blur-md border-b md:border-b-0 md:border-l border-white/10 shadow-2xl transition-all duration-500 ease-in-out flex flex-col
+                                ${isMobileMenuOpen ? 'h-[100dvh]' : 'h-0 overflow-hidden'} 
                                 md:relative md:inset-auto md:h-full md:w-[400px] md:top-auto
                             `}>
                                 <div className="p-4 border-b border-white/10 flex justify-between items-center bg-dark-900/50 shrink-0">
