@@ -44,10 +44,16 @@ function App() {
                             {!isMobileMenuOpen && (
                                 <button
                                     onClick={() => setIsMobileMenuOpen(true)}
-                                    className="md:hidden absolute bottom-16 left-1/2 -translate-x-1/2 z-20 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-bounce"
+                                    className="md:hidden absolute bottom-16 left-1/2 -translate-x-1/2 z-20 bg-dark-900/80 backdrop-blur-md border border-white/10 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce"
                                 >
-                                    <ChevronUp size={20} />
-                                    <span className="font-bold text-sm">View Updates</span>
+                                    <div className="relative flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-sm tracking-wide">View Updates</span>
+                                        <ChevronUp size={18} className="text-blue-400" />
+                                    </div>
                                 </button>
                             )}
 
