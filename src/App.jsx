@@ -44,7 +44,7 @@ function App() {
                             {!isMobileMenuOpen && (
                                 <button
                                     onClick={() => setIsMobileMenuOpen(true)}
-                                    className="md:hidden absolute bottom-0 left-1/2 -translate-x-1/2 z-20 bg-dark-900/90 backdrop-blur-md border-t border-x border-white/10 text-white px-8 py-3 rounded-t-2xl shadow-[0_-5px_20px_rgba(0,0,0,0.5)] flex items-center gap-3 transition-transform hover:-translate-y-1"
+                                    className="md:hidden absolute bottom-0 left-1/2 -translate-x-1/2 z-20 bg-dark-900/90 backdrop-blur-md border-t border-x border-white/10 text-white px-10 py-5 rounded-t-2xl shadow-[0_-5px_20px_rgba(0,0,0,0.5)] flex items-center gap-3 transition-transform hover:-translate-y-1"
                                 >
                                     <div className="relative flex h-3 w-3">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
