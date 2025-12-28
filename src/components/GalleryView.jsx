@@ -30,7 +30,7 @@ const GalleryView = () => {
     };
 
     return (
-        <div className="min-h-screen bg-dark-900 text-white p-4 pb-20 md:p-8">
+        <div className="h-full w-full overflow-y-auto bg-dark-900 text-white p-4 pb-20 md:p-8">
             <header className="flex justify-between items-center mb-8 max-w-7xl mx-auto">
                 <div className="flex items-center gap-4">
                     <Link to="/" className="p-2 hover:bg-white/10 rounded-full transition-colors">
