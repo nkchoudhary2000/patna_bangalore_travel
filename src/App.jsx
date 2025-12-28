@@ -8,11 +8,18 @@ import CommentSection from './components/CommentSection';
 import { Map, LayoutDashboard, MessageSquare, Camera } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
+import DeveloperCredit from './components/DeveloperCredit';
+import { useState } from 'react';
+
 function App() {
     console.log("App Version 2 Loaded");
+    const [focusLocation, setFocusLocation] = useState(null);
+
     return (
         <Router>
-            <div className="flex h-screen w-screen bg-dark-900 text-white overflow-hidden font-sans">
+            <div className="flex h-screen w-screen bg-dark-900 text-white overflow-hidden font-sans relative">
+                <DeveloperCredit />
+
                 {/* Mobile-first layout: Map is background, Feed is overlay */}
 
                 <Routes>
@@ -22,7 +29,7 @@ function App() {
                         <div className="relative w-full h-full flex flex-col md:flex-row">
                             {/* Map Container - Full Screen on Mobile, Flexible on Desktop */}
                             <div className="absolute inset-0 z-0 h-full w-full md:relative md:flex-1">
-                                <MapDisplay />
+                                <MapDisplay focusLocation={focusLocation} />
                             </div>
 
                             {/* Sidebar Feed - Drawer on Mobile, Side Panel on Desktop */}
@@ -42,7 +49,7 @@ function App() {
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                                    <TripFeed />
+                                    <TripFeed onLocationSelect={setFocusLocation} />
                                     <div className="p-4 border-t border-white/10">
                                         <CommentSection />
                                     </div>

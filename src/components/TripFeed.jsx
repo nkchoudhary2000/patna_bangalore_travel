@@ -5,7 +5,7 @@ import MediaCarousel from './MediaCarousel';
 import { MapPin, Navigation, Coffee, Bed, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const TripFeed = () => {
+const TripFeed = ({ onLocationSelect }) => {
     const [updates, setUpdates] = useState([]);
 
     useEffect(() => {
@@ -31,6 +31,13 @@ const TripFeed = () => {
     };
 
     const totalCost = updates.reduce((acc, curr) => acc + (Number(curr.cost) || 0), 0);
+
+    // Helper to request location focus
+    const handleCardClick = (post) => {
+        if (post.coordinates && onLocationSelect) {
+            onLocationSelect([post.coordinates.latitude, post.coordinates.longitude]);
+        }
+    };
 
     return (
         <div className="flex flex-col gap-6 p-4">
@@ -65,10 +72,13 @@ const TripFeed = () => {
                     </div>
 
                     {/* Content Card */}
-                    <div className="flex-1 bg-white/5 p-4 rounded-xl border border-white/5 hover:border-white/10 transition-colors shadow-sm">
+                    <div
+                        onClick={() => handleCardClick(post)}
+                        className="flex-1 bg-white/5 p-4 rounded-xl border border-white/5 hover:border-white/10 hover:bg-white/10 transition-all shadow-sm cursor-pointer group"
+                    >
                         <div className="flex justify-between items-start mb-2">
-                            <h3 className="font-semibold text-lg text-white/90 capitalize">
-                                {post.type === 'drive' ? 'Gallery' : post.type} Update
+                            <h3 className="font-semibold text-lg text-white/90 capitalize group-hover:text-blue-400 transition-colors">
+                                {post.type === 'drive' ? 'Drive' : post.type} Update
                             </h3>
                             <span className="text-xs text-gray-500 flex items-center gap-1">
                                 <Clock size={12} />
@@ -111,10 +121,10 @@ const TripFeed = () => {
                         {post.aqi && (
                             <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-dark-900/50 border border-white/5 mr-2">
                                 <span className={`text-[10px] font-bold ${post.aqi <= 50 ? 'text-green-400' :
-                                        post.aqi <= 100 ? 'text-yellow-400' :
-                                            post.aqi <= 150 ? 'text-orange-400' :
-                                                post.aqi <= 200 ? 'text-red-400' :
-                                                    'text-purple-400'
+                                    post.aqi <= 100 ? 'text-yellow-400' :
+                                        post.aqi <= 150 ? 'text-orange-400' :
+                                            post.aqi <= 200 ? 'text-red-400' :
+                                                'text-purple-400'
                                     }`}>
                                     AQI {post.aqi}
                                 </span>
