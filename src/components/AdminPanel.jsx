@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { signInWithPopup, signOut } from 'firebase/auth';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, setDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase';
-import { Lock, LogOut, Send, Navigation, Camera, Wallet, MapPin, Edit2, Trash2, X } from 'lucide-react';
+import { Lock, LogOut, Send, Navigation, Camera, Wallet, MapPin, Edit2, Trash2, X, FileDown, FileUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MediaCarousel from './MediaCarousel';
 
@@ -23,6 +23,10 @@ const AdminPanel = () => {
     const [editingId, setEditingId] = useState(null);
     const [status, setStatus] = useState('');
     const [recentUpdates, setRecentUpdates] = useState([]);
+
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
     const navigate = useNavigate();
 
     // TODO: Replace with your actual email
@@ -44,7 +48,8 @@ const AdminPanel = () => {
 
     useEffect(() => {
         if (!user) return;
-        const q = query(collection(db, "trip_updates"), orderBy("timestamp", "desc"), limit(5));
+        // Fetch all updates sorted by timestamp ASCENDING (Oldest first)
+        const q = query(collection(db, "trip_updates"), orderBy("timestamp", "asc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setRecentUpdates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
@@ -173,6 +178,160 @@ const AdminPanel = () => {
         setFormData({ ...formData, message: '', mediaUrl: '', cost: '', locationName: '', aqi: '' });
     };
 
+    const escapeCSV = (str) => {
+        if (!str) return '';
+        const stringValue = String(str);
+        if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+            return `"${stringValue.replace(/"/g, '""')}"`;
+        }
+        return stringValue;
+    };
+
+    const handleExport = async () => {
+        setStatus("Exporting...");
+        try {
+            // Ensure export is also sorted Ascending
+            const q = query(collection(db, "trip_updates"), orderBy("timestamp", "asc"));
+            const querySnapshot = await getDocs(q);
+            const updates = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const headers = ['id', 'timestamp', 'type', 'message', 'locationName', 'latitude', 'longitude', 'cost', 'costCategory', 'mediaUrl', 'mediaType', 'aqi'];
+            const csvContent = [
+                headers.join(','),
+                ...updates.map(row => {
+                    const timestamp = row.timestamp?.toDate().toISOString() || '';
+                    return [
+                        escapeCSV(row.id),
+                        escapeCSV(timestamp),
+                        escapeCSV(row.type),
+                        escapeCSV(row.message),
+                        escapeCSV(row.locationName),
+                        row.coordinates?.latitude || '',
+                        row.coordinates?.longitude || '',
+                        row.cost || 0,
+                        escapeCSV(row.costCategory),
+                        escapeCSV(row.mediaUrl),
+                        escapeCSV(row.mediaType),
+                        row.aqi || ''
+                    ].join(',');
+                })
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'trip_updates_backup.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setStatus("Export Complete!");
+        } catch (error) {
+            console.error("Export failed:", error);
+            setStatus("Export Failed");
+        }
+    };
+
+    const handleImport = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        setStatus("Importing...");
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target.result;
+            const rows = text.split('\n').filter(row => row.trim() !== '');
+            // Skip header row
+
+            let successCount = 0;
+            let errorCount = 0;
+
+            // Helper to parse CSV line respecting quotes
+            const parseCSVLine = (line) => {
+                const result = [];
+                let start = 0;
+                let insideQuotes = false;
+
+                for (let i = 0; i < line.length; i++) {
+                    if (line[i] === '"') {
+                        insideQuotes = !insideQuotes;
+                    } else if (line[i] === ',' && !insideQuotes) {
+                        let val = line.substring(start, i);
+                        if (val.startsWith('"') && val.endsWith('"')) {
+                            val = val.slice(1, -1).replace(/""/g, '"');
+                        }
+                        result.push(val);
+                        start = i + 1;
+                    }
+                }
+                let lastVal = line.substring(start);
+                if (lastVal.startsWith('"') && lastVal.endsWith('"')) {
+                    lastVal = lastVal.slice(1, -1).replace(/""/g, '"');
+                }
+                result.push(lastVal);
+                return result;
+            };
+
+            for (let i = 1; i < rows.length; i++) {
+                try {
+                    const values = parseCSVLine(rows[i]);
+                    // Map values to object based on fixed index structure from export
+                    const id = values[0];
+                    const timestampStr = values[1];
+                    const type = values[2] || 'drive';
+                    const message = values[3] || '';
+                    const locationName = values[4] || '';
+                    const lat = parseFloat(values[5]);
+                    const lon = parseFloat(values[6]);
+                    const cost = parseFloat(values[7]) || 0;
+                    const costCategory = values[8] || 'Petrol';
+                    const mediaUrl = values[9] || '';
+                    const mediaType = values[10] || 'image';
+                    const aqi = values[11] ? parseFloat(values[11]) : null;
+
+                    const data = {
+                        type,
+                        message,
+                        locationName,
+                        coordinates: (!isNaN(lat) && !isNaN(lon)) ? { latitude: lat, longitude: lon } : null,
+                        cost,
+                        costCategory,
+                        mediaUrl,
+                        mediaType,
+                        aqi
+                    };
+
+                    if (timestampStr) {
+                        data.timestamp = new Date(timestampStr);
+                    }
+
+                    if (id && id.trim() !== '') {
+                        // Use setDoc with merge: true to handle both updates and restores (upsert)
+                        await setDoc(doc(db, "trip_updates", id), data, { merge: true });
+                    } else {
+                        // Create new
+                        if (!data.timestamp) data.timestamp = serverTimestamp();
+                        await addDoc(collection(db, "trip_updates"), data);
+                    }
+                    successCount++;
+                } catch (err) {
+                    console.error("Row import failed:", err);
+                    errorCount++;
+                    setStatus(`Error on row ${i}: ${err.message}`);
+                }
+            }
+            if (errorCount === 0) {
+                setStatus(`Import Successful! processed ${successCount} records.`);
+            } else {
+                setStatus(`Completed with errors. Success: ${successCount}, Failed: ${errorCount}`);
+            }
+            // Reset file input
+            event.target.value = null;
+        };
+        reader.readAsText(file);
+    };
+
     if (!user) {
         return (
             <div className="min-h-screen w-full flex items-center justify-center bg-dark-900 p-4 overflow-y-auto">
@@ -192,6 +351,16 @@ const AdminPanel = () => {
             </div>
         );
     }
+
+
+    // Pagination Logic
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentItems = recentUpdates.slice(indexOfFirstItem, indexOfLastItem);
+    const totalPages = Math.ceil(recentUpdates.length / itemsPerPage);
+
+    const nextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages));
+    const prevPage = () => setCurrentPage(prev => Math.max(prev - 1, 1));
 
     return (
         <div className="min-h-screen bg-dark-900 text-white p-4 pb-20 overflow-x-hidden">
@@ -401,9 +570,28 @@ const AdminPanel = () => {
 
                 {/* Right Column: Updates Table */}
                 < div className="lg:col-span-8" >
-                    <h3 className="text-lg font-bold mb-4 text-gray-300">All Updates ({recentUpdates.length})</h3>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-bold text-gray-300">All Updates (Total: {recentUpdates.length})</h3>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleExport}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20 text-xs font-semibold transition-colors"
+                            >
+                                <FileDown size={14} /> Export CSV
+                            </button>
+                            <label className="flex items-center gap-1 px-3 py-1.5 bg-green-500/10 text-green-400 rounded-lg hover:bg-green-500/20 text-xs font-semibold transition-colors cursor-pointer">
+                                <FileUp size={14} /> Import CSV
+                                <input
+                                    type="file"
+                                    accept=".csv"
+                                    onChange={handleImport}
+                                    className="hidden"
+                                />
+                            </label>
+                        </div>
+                    </div>
                     <div className="bg-dark-800 rounded-xl border border-white/10 overflow-hidden sticky top-6">
-                        <div className="overflow-x-auto max-h-[85vh] overflow-y-auto">
+                        <div className="overflow-x-auto max-h-[75vh] overflow-y-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 bg-dark-900/90 backdrop-blur-md z-10 shadow-sm">
                                     <tr className="text-gray-400 text-xs uppercase border-b border-white/10">
@@ -416,7 +604,7 @@ const AdminPanel = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5 text-sm text-gray-300">
-                                    {recentUpdates.map(update => (
+                                    {currentItems.map(update => (
                                         <tr key={update.id} className="hover:bg-white/5 transition-colors">
                                             <td className="p-4 font-mono text-xs whitespace-nowrap">
                                                 {update.timestamp?.toDate().toLocaleDateString()}<br />
@@ -461,6 +649,29 @@ const AdminPanel = () => {
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Pagination Footer */}
+                        {recentUpdates.length > itemsPerPage && (
+                            <div className="flex justify-between items-center p-4 border-t border-white/10 bg-dark-900/50">
+                                <button
+                                    onClick={prevPage}
+                                    disabled={currentPage === 1}
+                                    className="p-2 bg-dark-800 rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-400"
+                                >
+                                    <ChevronLeft size={20} />
+                                </button>
+                                <span className="text-xs text-gray-500 font-mono">
+                                    Page {currentPage} of {totalPages}
+                                </span>
+                                <button
+                                    onClick={nextPage}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 bg-dark-800 rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-400"
+                                >
+                                    <ChevronRight size={20} />
+                                </button>
+                            </div>
+                        )}
                     </div>
                     <div className="mt-8 text-center pb-10 lg:text-left">
                         <button onClick={() => navigate('/')} className="text-gray-500 text-sm hover:text-white underline">Back to Public View</button>
