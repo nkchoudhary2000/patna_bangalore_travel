@@ -73,7 +73,7 @@ function App() {
                                             onClick={() => setIsMobileMenuOpen(false)}
                                             className="md:hidden p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400"
                                         >
-                                            <ChevronDown size={20} />
+                                            <ChevronUp size={20} />
                                         </button>
 
                                         <Link to="/gallery" className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Gallery">
