@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import L from 'leaflet';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
+import { ChevronLeft } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default Leaflet marker icons in React
@@ -81,6 +82,7 @@ const MapDisplay = ({ focusLocation }) => {
     const [points, setPoints] = useState([]);
     const [currentLocation, setCurrentLocation] = useState(null);
     const [stats, setStats] = useState({ traveled: 0, remaining: 0, total: 0, progress: 0 });
+    const [showMobileStats, setShowMobileStats] = useState(false); // Mobile stats drawer state
 
     // Coordinates
     const PATNA_COORDS = [25.5941, 85.1376];
@@ -162,7 +164,7 @@ const MapDisplay = ({ focusLocation }) => {
     return (
         <div className="h-full w-full relative">
             {/* Floating Stats Card */}
-            <div className="absolute top-4 left-4 z-[1000] space-y-3">
+            <div className="hidden md:block absolute top-4 left-4 z-[1000] space-y-3">
                 {/* Live Status */}
                 <div className="bg-dark-900/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-xl w-[220px]">
                     <div className="flex justify-between items-start mb-3">
@@ -213,6 +215,70 @@ const MapDisplay = ({ focusLocation }) => {
                             {currentLocation[0].toFixed(4)}, {currentLocation[1].toFixed(4)}
                         </div>
                     </div>
+                )}
+            </div>
+
+            {/* Mobile Stats Drawer */}
+            <div className="md:hidden">
+                {/* Toggle Button (Visible when closed) */}
+                <button
+                    onClick={() => setShowMobileStats(true)}
+                    className={`absolute top-20 right-0 z-[1000] bg-dark-900/90 backdrop-blur text-white p-2 rounded-l-xl border-y border-l border-white/10 shadow-xl transition-all duration-300 ${showMobileStats ? 'translate-x-[100%]' : 'translate-x-0'}`}
+                >
+                    <ChevronLeft size={20} />
+                </button>
+
+                {/* Sliding Drawer */}
+                <div
+                    className={`absolute top-20 right-0 z-[1000] transition-transform duration-300 ease-out ${showMobileStats ? 'translate-x-0' : 'translate-x-[120%]'}`}
+                >
+                    <div className="bg-dark-900/90 backdrop-blur-md p-4 rounded-l-xl border-y border-l border-white/10 shadow-2xl w-[260px]">
+                        {/* Header with Close (although clicking map closes it too) */}
+                        <div className="flex justify-between items-center mb-3">
+                            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Trip Status</span>
+                            {/* Optional close button inside if needed, or just rely on click-away */}
+                        </div>
+
+                        <div className="flex justify-between items-start mb-3">
+                            <div className="flex items-center gap-2">
+                                <span className="relative flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                                </span>
+                                <span className="font-bold text-green-400 text-sm">Live Tracking</span>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-xl font-bold text-white">{stats.progress}%</div>
+                            </div>
+                        </div>
+
+                        {/* Distance Bars */}
+                        <div className="space-y-3">
+                            <div>
+                                <div className="flex justify-between text-[11px] text-gray-400 mb-1">
+                                    <span>Covered</span>
+                                    <span className="text-white font-mono">{stats.traveled} km</span>
+                                </div>
+                                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-green-500" style={{ width: `${stats.progress}%` }}></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-[11px] text-gray-400 mb-1">
+                                    <span>Remaining</span>
+                                    <span className="text-blue-300 font-mono">{stats.remaining} km</span>
+                                </div>
+                                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-blue-500/50" style={{ width: '100%' }}></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Backdrop to close when clicking outside (transparent) */}
+                {showMobileStats && (
+                    <div className="absolute inset-0 z-[999]" onClick={() => setShowMobileStats(false)}></div>
                 )}
             </div>
 
