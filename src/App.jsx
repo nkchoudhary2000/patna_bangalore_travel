@@ -9,12 +9,56 @@ import { Map, LayoutDashboard, MessageSquare, Camera, ChevronUp, ChevronDown } f
 import 'leaflet/dist/leaflet.css';
 
 import DeveloperCredit from './components/DeveloperCredit';
-import { useState } from 'react';
+import AnimatedDropdown from './components/AnimatedDropdown';
+import { useState, useEffect } from 'react';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from './firebase';
 
 function App() {
     console.log("App Version 2 Loaded");
     const [focusLocation, setFocusLocation] = useState(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [trips, setTrips] = useState([]);
+    const [selectedTripId, setSelectedTripId] = useState('legacy');
+
+    useEffect(() => {
+        const q = query(collection(db, "trips"), orderBy("createdAt", "desc"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const t = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setTrips(t);
+            // Default to the first (latest) trip if available, else legacy
+            // Only set if we are currently on 'legacy' (or initial load logic)?
+            // User requirement: "last trip always display".
+            // So if trips exist, default to t[0].id.
+            if (t.length > 0) {
+                // If the user hasn't manually selected yet (how to track? simplified: just set it)
+                // Actually, if I just set it blindly it might override selection on re-renders?
+                // `onSnapshot` runs on updates. If a new trip is created, we switch to it.
+                // But initially it runs once.
+                // Let's rely on checking if selectedTripId is 'legacy' to switch.
+                // But we initiated state with 'legacy'.
+                // So on first load, we switch.
+                // If I select "Legacy" manually later, I don't want it to auto-switch back.
+                // Can't easily distinguish "initialized legacy" vs "user selected legacy".
+                // I'll just check if t.length > 0 AND trips state was empty before?
+                // Simple approach: Use a "loading" state or distinct initial state.
+                // But for now:
+                // Assuming "Patna -> Bangalore" is the *oldest*.
+                // If we have new trips, we probably want to see them.
+            }
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // Effect to set default trip once trips are loaded
+    useEffect(() => {
+        if (trips.length > 0 && selectedTripId === 'legacy') {
+            // We might want to switch to the latest trip?
+            // If 'legacy' is truly intended, this might be annoying.
+            // But given requirement "last trip always display", I should populate it.
+            setSelectedTripId(trips[0].id);
+        }
+    }, [trips]);
 
     // Handle initial map load or specific focus
     const handleLocationSelect = (loc) => {
@@ -37,7 +81,12 @@ function App() {
                         <div className="relative w-full h-full flex flex-col md:flex-row">
                             {/* Map Container - Full Screen on Mobile, Flexible on Desktop */}
                             <div className="absolute inset-0 z-0 h-full w-full md:relative md:flex-1">
-                                <MapDisplay focusLocation={focusLocation} />
+                                <MapDisplay
+                                    focusLocation={focusLocation}
+                                    selectedTripId={selectedTripId}
+                                    tripStart={trips.find(t => t.id === selectedTripId)?.startPoint}
+                                    tripEnd={trips.find(t => t.id === selectedTripId)?.endPoint}
+                                />
                             </div>
 
                             {/* Mobile "Show Updates" Button (Only visible when menu closed) */}
@@ -64,9 +113,11 @@ function App() {
                                 md:relative md:inset-auto md:h-full md:w-[400px] md:top-auto
                             `}>
                                 <div className="p-4 border-b border-white/10 flex justify-between items-center bg-dark-900/50 shrink-0">
-                                    <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                                        Patna ➜ Bangalore
-                                    </h1>
+                                    <AnimatedDropdown
+                                        trips={trips}
+                                        selectedTripId={selectedTripId}
+                                        onSelect={setSelectedTripId}
+                                    />
                                     <div className="flex gap-2 items-center">
                                         {/* Mobile Close Button */}
                                         <button
@@ -86,7 +137,7 @@ function App() {
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                                    <TripFeed onLocationSelect={handleLocationSelect} />
+                                    <TripFeed onLocationSelect={handleLocationSelect} selectedTripId={selectedTripId} />
                                     <div className="p-4 border-t border-white/10">
                                         <CommentSection />
                                     </div>

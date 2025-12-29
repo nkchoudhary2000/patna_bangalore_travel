@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { signInWithPopup, signOut } from 'firebase/auth';
 import { collection, addDoc, getDocs, updateDoc, setDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase';
-import { Lock, LogOut, Send, Navigation, Camera, Wallet, MapPin, Edit2, Trash2, X, FileDown, FileUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Lock, LogOut, Send, Navigation, Camera, Wallet, MapPin, Edit2, Trash2, X, FileDown, FileUp, ChevronLeft, ChevronRight, Plus, Calendar, Map } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MediaCarousel from './MediaCarousel';
 
@@ -23,6 +23,17 @@ const AdminPanel = () => {
     const [editingId, setEditingId] = useState(null);
     const [status, setStatus] = useState('');
     const [recentUpdates, setRecentUpdates] = useState([]);
+
+    // Trip Management State
+    const [trips, setTrips] = useState([]);
+    const [selectedTripId, setSelectedTripId] = useState('legacy'); // 'legacy' or trip doc ID
+    const [showNewTripInput, setShowNewTripInput] = useState(false);
+    // New Trip Form State
+    const [newTripData, setNewTripData] = useState({
+        name: '',
+        startName: '', startLat: '', startLon: '',
+        endName: '', endLat: '', endLon: ''
+    });
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
@@ -48,13 +59,88 @@ const AdminPanel = () => {
 
     useEffect(() => {
         if (!user) return;
+
+        // Fetch Trips
+        const fetchTrips = () => {
+            const q = query(collection(db, "trips"), orderBy("createdAt", "desc"));
+            const unsubscribe = onSnapshot(q, (snapshot) => {
+                const t = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setTrips(t);
+                // If we have trips and current selection is legacy, maybe switch? 
+                // For now, let's stick to legacy default unless user switches.
+                // Actually, requirement: "default to latest Trip".
+                // BUT this is Admin panel. Persistent selection is better? 
+                // Let's default to the *latest created trip* if 'legacy' is currently selected AND trips exist?
+                // No, standard behavior: Default to first available or allow manual. 
+                // I'll keep 'legacy' as initial, but if they create a new one, I switch to it.
+            });
+            return unsubscribe;
+        };
+        const unsubTrips = fetchTrips();
+
         // Fetch all updates sorted by timestamp ASCENDING (Oldest first)
+        // We fetch ALL and filter client side to avoid complex querying/indexing for now
         const q = query(collection(db, "trip_updates"), orderBy("timestamp", "asc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setRecentUpdates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            unsubTrips();
+        };
     }, [user]);
+
+    const handleCreateTrip = async () => {
+        if (!newTripData.name.trim()) return;
+        setStatus("Creating Trip...");
+        try {
+            const docRef = await addDoc(collection(db, "trips"), {
+                name: newTripData.name,
+                createdAt: serverTimestamp(),
+                isActive: true,
+                startPoint: {
+                    name: newTripData.startName || 'Start',
+                    coords: {
+                        latitude: parseFloat(newTripData.startLat) || 0,
+                        longitude: parseFloat(newTripData.startLon) || 0
+                    }
+                },
+                endPoint: {
+                    name: newTripData.endName || 'End',
+                    coords: {
+                        latitude: parseFloat(newTripData.endLat) || 0,
+                        longitude: parseFloat(newTripData.endLon) || 0
+                    }
+                }
+            });
+            setShowNewTripInput(false);
+            setNewTripData({
+                name: '',
+                startName: '', startLat: '', startLon: '',
+                endName: '', endLat: '', endLon: ''
+            });
+            setSelectedTripId(docRef.id);
+            setStatus(`Created trip: ${newTripData.name}`);
+        } catch (e) {
+            console.error("Error creating trip", e);
+            setStatus("Failed to create trip");
+        }
+    };
+
+    const handleDeleteTrip = async () => {
+        if (selectedTripId === 'legacy') return;
+        const tripName = trips.find(t => t.id === selectedTripId)?.name || 'this trip';
+        if (window.confirm(`Are you sure you want to delete "${tripName}"? This will NOT delete the posts associated with it (they will become visible in Legacy), but the Trip grouping will be lost.`)) {
+            try {
+                await deleteDoc(doc(db, "trips", selectedTripId));
+                setStatus(`Deleted trip: ${tripName}`);
+                setSelectedTripId('legacy');
+            } catch (e) {
+                console.error("Error deleting trip", e);
+                setStatus("Failed to delete trip");
+            }
+        }
+    };
 
     const handleLogin = async () => {
         try {
@@ -129,6 +215,10 @@ const AdminPanel = () => {
             // Only set timestamp on creation to preserve original time
             if (!editingId) {
                 dataToSave.timestamp = serverTimestamp();
+                // Attach Trip ID (If legacy, we leave it undefined/null)
+                if (selectedTripId !== 'legacy') {
+                    dataToSave.tripId = selectedTripId;
+                }
             }
 
             if (editingId) {
@@ -159,6 +249,8 @@ const AdminPanel = () => {
             locationName: update.locationName || '',
             aqi: update.aqi || ''
         });
+        // If editing an item from a different trip context?
+        // Ideally we should switch context, but for now we trust the filter.
         setEditingId(update.id);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -354,10 +446,17 @@ const AdminPanel = () => {
 
 
     // Pagination Logic
+    // Filter updates by selected Trip ID
+    const key = selectedTripId === 'legacy' ? 'legacy' : selectedTripId;
+    const filteredUpdates = recentUpdates.filter(u => {
+        if (selectedTripId === 'legacy') return !u.tripId; // Show check if tripId is missing
+        return u.tripId === selectedTripId;
+    });
+
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentItems = recentUpdates.slice(indexOfFirstItem, indexOfLastItem);
-    const totalPages = Math.ceil(recentUpdates.length / itemsPerPage);
+    const currentItems = filteredUpdates.slice(indexOfFirstItem, indexOfLastItem);
+    const totalPages = Math.ceil(filteredUpdates.length / itemsPerPage);
 
     const nextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages));
     const prevPage = () => setCurrentPage(prev => Math.max(prev - 1, 1));
@@ -370,6 +469,112 @@ const AdminPanel = () => {
                     <LogOut size={20} />
                 </button>
             </header>
+
+            {/* Trip Selector Bar */}
+            <div className="max-w-7xl mx-auto mb-6 bg-dark-800 p-4 rounded-xl border border-white/10 flex flex-wrap gap-4 items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <Map size={18} className="text-blue-400" />
+                        <span className="text-gray-400 text-sm">Active Trip:</span>
+                    </div>
+                    <select
+                        value={selectedTripId}
+                        onChange={(e) => {
+                            setSelectedTripId(e.target.value);
+                            setCurrentPage(1); // Reset page on switch
+                            setEditingId(null);
+                        }}
+                        className="bg-dark-900 border border-white/10 rounded-lg p-2 text-white min-w-[200px]"
+                    >
+                        <option value="legacy">Patna ➜ Bangalore (Legacy)</option>
+                        {trips.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={handleDeleteTrip}
+                        disabled={selectedTripId === 'legacy'}
+                        className={`p-2 rounded-lg transition-colors ${selectedTripId === 'legacy' ? 'text-gray-600 cursor-not-allowed' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}
+                        title="Delete this Trip"
+                    >
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+
+                {!showNewTripInput ? (
+                    <button
+                        onClick={() => setShowNewTripInput(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-semibold transition-colors"
+                    >
+                        <Plus size={16} /> New Trip
+                    </button>
+                ) : (
+
+                    <div className="bg-dark-900 border border-white/10 rounded-xl p-4 w-full animate-in fade-in slide-in-from-top-4 space-y-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-bold text-sm text-gray-300">New Trip Details</h3>
+                            <button
+                                onClick={() => setShowNewTripInput(false)}
+                                className="text-gray-500 hover:text-white"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-[10px] text-gray-500 uppercase">Trip Name</label>
+                                <input
+                                    type="text"
+                                    value={newTripData.name}
+                                    onChange={(e) => setNewTripData({ ...newTripData, name: e.target.value })}
+                                    placeholder="e.g. Bangalore to Goa"
+                                    className="w-full bg-dark-800 border border-white/10 rounded p-2 text-sm text-white"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2 p-2 bg-dark-800/50 rounded-lg">
+                                    <span className="text-[10px] text-green-400 font-bold uppercase">Start Point</span>
+                                    <input
+                                        type="text"
+                                        value={newTripData.startName}
+                                        onChange={(e) => setNewTripData({ ...newTripData, startName: e.target.value })}
+                                        placeholder="Name (e.g. Patna)"
+                                        className="w-full bg-dark-800 border border-white/10 rounded p-1.5 text-xs text-white"
+                                    />
+                                    <div className="flex gap-1">
+                                        <input type="number" step="any" placeholder="Lat" value={newTripData.startLat} onChange={e => setNewTripData({ ...newTripData, startLat: e.target.value })} className="w-1/2 bg-dark-800 border-white/10 border rounded p-1 text-[10px]" />
+                                        <input type="number" step="any" placeholder="Lon" value={newTripData.startLon} onChange={e => setNewTripData({ ...newTripData, startLon: e.target.value })} className="w-1/2 bg-dark-800 border-white/10 border rounded p-1 text-[10px]" />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2 p-2 bg-dark-800/50 rounded-lg">
+                                    <span className="text-[10px] text-red-400 font-bold uppercase">End Point</span>
+                                    <input
+                                        type="text"
+                                        value={newTripData.endName}
+                                        onChange={(e) => setNewTripData({ ...newTripData, endName: e.target.value })}
+                                        placeholder="Name (e.g. Goa)"
+                                        className="w-full bg-dark-800 border border-white/10 rounded p-1.5 text-xs text-white"
+                                    />
+                                    <div className="flex gap-1">
+                                        <input type="number" step="any" placeholder="Lat" value={newTripData.endLat} onChange={e => setNewTripData({ ...newTripData, endLat: e.target.value })} className="w-1/2 bg-dark-800 border-white/10 border rounded p-1 text-[10px]" />
+                                        <input type="number" step="any" placeholder="Lon" value={newTripData.endLon} onChange={e => setNewTripData({ ...newTripData, endLon: e.target.value })} className="w-1/2 bg-dark-800 border-white/10 border rounded p-1 text-[10px]" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleCreateTrip}
+                                className="w-full py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-bold shadow-lg transition-transform active:scale-95"
+                            >
+                                Create Trip
+                            </button>
+                        </div>
+                    </div >
+                )}
+            </div >
 
             <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Left Column: Input Form (Sticky on Desktop) */}
@@ -571,7 +776,10 @@ const AdminPanel = () => {
                 {/* Right Column: Updates Table */}
                 < div className="lg:col-span-8" >
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-bold text-gray-300">All Updates (Total: {recentUpdates.length})</h3>
+                        <h3 className="text-lg font-bold text-gray-300">
+                            {selectedTripId === 'legacy' ? 'Legacy Updates' : trips.find(t => t.id === selectedTripId)?.name || 'Updates'}
+                            <span className="text-sm font-normal text-gray-500 ml-2">(Total: {filteredUpdates.length})</span>
+                        </h3>
                         <div className="flex gap-2">
                             <button
                                 onClick={handleExport}

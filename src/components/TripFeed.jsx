@@ -5,7 +5,7 @@ import MediaCarousel from './MediaCarousel';
 import { MapPin, Navigation, Coffee, Bed, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const TripFeed = ({ onLocationSelect }) => {
+const TripFeed = ({ onLocationSelect, selectedTripId = 'legacy' }) => {
     const [updates, setUpdates] = useState([]);
 
     useEffect(() => {
@@ -21,6 +21,12 @@ const TripFeed = ({ onLocationSelect }) => {
         return () => unsubscribe();
     }, []);
 
+    // Filter updates based on selected Trip
+    const filteredUpdates = updates.filter(post => {
+        if (selectedTripId === 'legacy') return !post.tripId; // Legacy posts have no tripId
+        return post.tripId === selectedTripId;
+    });
+
     const getIcon = (type) => {
         switch (type) {
             case 'stop': return <Coffee className="text-orange-400" size={16} />;
@@ -30,7 +36,7 @@ const TripFeed = ({ onLocationSelect }) => {
         }
     };
 
-    const totalCost = updates.reduce((acc, curr) => acc + (Number(curr.cost) || 0), 0);
+    const totalCost = filteredUpdates.reduce((acc, curr) => acc + (Number(curr.cost) || 0), 0);
 
     // Helper to request location focus
     const handleCardClick = (post) => {
@@ -47,13 +53,13 @@ const TripFeed = ({ onLocationSelect }) => {
                 <span className="text-xl font-bold text-green-400 font-mono">₹{totalCost.toLocaleString()}</span>
             </div>
 
-            {updates.length === 0 && (
+            {filteredUpdates.length === 0 && (
                 <div className="text-center text-gray-500 py-10">
-                    <p>No updates yet. The journey begins soon!</p>
+                    <p>No updates found for this trip.</p>
                 </div>
             )}
 
-            {updates.map((post, index) => (
+            {filteredUpdates.map((post, index) => (
                 <motion.div
                     key={post.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -62,7 +68,7 @@ const TripFeed = ({ onLocationSelect }) => {
                     className="flex gap-4 relative"
                 >
                     {/* Timeline Line */}
-                    {index !== updates.length - 1 && (
+                    {index !== filteredUpdates.length - 1 && (
                         <div className="absolute left-[19px] top-10 bottom-[-24px] w-[2px] bg-white/10 z-0"></div>
                     )}
 

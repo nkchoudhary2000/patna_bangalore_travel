@@ -78,15 +78,22 @@ function ResetMapControl({ bounds }) {
     );
 }
 
-const MapDisplay = ({ focusLocation }) => {
+const MapDisplay = ({ focusLocation, selectedTripId = 'legacy', tripStart, tripEnd }) => {
     const [points, setPoints] = useState([]);
-    const [currentLocation, setCurrentLocation] = useState(null);
-    const [stats, setStats] = useState({ traveled: 0, remaining: 0, total: 0, progress: 0 });
+    // State for points only, stats derived in render
+
+    // Removed specific state for stats/currentLocation to avoid synchronization issues
     const [showMobileStats, setShowMobileStats] = useState(false); // Mobile stats drawer state
 
     // Coordinates
+    // Coordinates - Default to Patna/Bangalore if not provided
     const PATNA_COORDS = [25.5941, 85.1376];
-    const BANGALORE_COORDS = [13.0018, 77.6892]; // KR Puram
+    const BANGALORE_COORDS = [13.0018, 77.6892];
+
+    const startCoords = tripStart?.coords ? [tripStart.coords.latitude, tripStart.coords.longitude] : PATNA_COORDS;
+    const endCoords = tripEnd?.coords ? [tripEnd.coords.latitude, tripEnd.coords.longitude] : BANGALORE_COORDS;
+    const startName = tripStart?.name || "Patna";
+    const endName = tripEnd?.name || "Bangalore";
 
     // Calculate distance between two points (Haversine formula) in km
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -114,52 +121,57 @@ const MapDisplay = ({ focusLocation }) => {
             });
 
             setPoints(fetchedData);
-
-            // Calculate Stats
-            let traveledDist = 0;
-            let current = PATNA_COORDS;
-
-            fetchedData.forEach(p => {
-                const next = [p.coordinates.latitude, p.coordinates.longitude];
-                traveledDist += calculateDistance(current[0], current[1], next[0], next[1]);
-                current = next;
-            });
-
-            const remainingDist = calculateDistance(current[0], current[1], BANGALORE_COORDS[0], BANGALORE_COORDS[1]);
-            const totalDist = traveledDist + remainingDist;
-
-            // If no updates yet, total is just straight line Patna -> Bangalore
-            const finalTotal = totalDist === 0 ? calculateDistance(PATNA_COORDS[0], PATNA_COORDS[1], BANGALORE_COORDS[0], BANGALORE_COORDS[1]) : totalDist;
-
-            setStats({
-                traveled: Math.round(traveledDist),
-                remaining: Math.round(remainingDist),
-                total: Math.round(finalTotal),
-                progress: Math.min(100, Math.round((traveledDist / finalTotal) * 100))
-            });
-
-            if (fetchedData.length > 0) {
-                const last = fetchedData[fetchedData.length - 1];
-                setCurrentLocation([last.coordinates.latitude, last.coordinates.longitude]);
-            } else {
-                setCurrentLocation(PATNA_COORDS);
-            }
         });
 
         return () => unsubscribe();
     }, []);
 
-    // Traveled Path: Patna -> ...Points
-    const traveledPath = [PATNA_COORDS, ...points.map(p => [p.coordinates.latitude, p.coordinates.longitude])];
+    // Use filtered points for path
+    // We need to re-filter here or store filtered in state? 
+    // Optimization: Store filtered points in state. For now, just re-filter (it's small data).
+    const filteredPointsRender = points.filter(p => {
+        if (selectedTripId === 'legacy') return !p.tripId;
+        return p.tripId === selectedTripId;
+    });
 
-    // Remaining Path: Last Point (or Patna) -> Bangalore
-    const lastPoint = points.length > 0
-        ? [points[points.length - 1].coordinates.latitude, points[points.length - 1].coordinates.longitude]
-        : PATNA_COORDS;
-    const remainingPath = [lastPoint, BANGALORE_COORDS];
+    // Traveled Path: Start -> ...Points
+    const traveledPath = [startCoords, ...filteredPointsRender.map(p => [p.coordinates.latitude, p.coordinates.longitude])];
 
-    // Initial Bounds: Patna to Bangalore
-    const initialBounds = L.latLngBounds([PATNA_COORDS, BANGALORE_COORDS]);
+    // Remaining Path: Last Point (or Start) -> End
+    const lastPoint = filteredPointsRender.length > 0
+        ? [filteredPointsRender[filteredPointsRender.length - 1].coordinates.latitude, filteredPointsRender[filteredPointsRender.length - 1].coordinates.longitude]
+        : startCoords;
+    const remainingPath = [lastPoint, endCoords];
+
+    // Initial Bounds: Start to End
+    const initialBounds = L.latLngBounds([startCoords, endCoords]);
+
+    // --- On-the-fly Stats Calculation ---
+    // This ensures stats are always in sync with the filtered points and start/end props
+    let traveledDist = 0;
+    let current = startCoords;
+
+    filteredPointsRender.forEach(p => {
+        const next = [p.coordinates.latitude, p.coordinates.longitude];
+        traveledDist += calculateDistance(current[0], current[1], next[0], next[1]);
+        current = next;
+    });
+
+    const remainingDist = calculateDistance(current[0], current[1], endCoords[0], endCoords[1]);
+    const totalDist = traveledDist + remainingDist;
+    const finalTotal = totalDist === 0 ? calculateDistance(startCoords[0], startCoords[1], endCoords[0], endCoords[1]) : totalDist;
+
+    const stats = {
+        traveled: Math.round(traveledDist),
+        remaining: Math.round(remainingDist),
+        total: Math.round(finalTotal),
+        progress: Math.min(100, Math.round((traveledDist / finalTotal) * 100))
+    };
+
+    const currentLocation = filteredPointsRender.length > 0
+        ? [filteredPointsRender[filteredPointsRender.length - 1].coordinates.latitude, filteredPointsRender[filteredPointsRender.length - 1].coordinates.longitude]
+        : startCoords;
+    // ------------------------------------
 
     return (
         <div className="h-full w-full relative">
@@ -283,7 +295,7 @@ const MapDisplay = ({ focusLocation }) => {
             </div>
 
             <MapContainer
-                center={PATNA_COORDS}
+                center={startCoords}
                 zoom={5}
                 scrollWheelZoom={true}
                 className="h-full w-full outline-none"
@@ -312,23 +324,21 @@ const MapDisplay = ({ focusLocation }) => {
                     dashArray="10, 10" // Dashed line to show it's projected
                 />
 
-                {/* Start Marker (Patna) */}
-                <Marker position={PATNA_COORDS}>
+                {/* Start Marker */}
+                <Marker position={startCoords}>
                     <Popup>
-                        <div className="font-bold text-sm">Patna (Start)</div>
-                        <div className="text-xs text-gray-500">Railway Station</div>
+                        <div className="font-bold text-sm">{startName} (Start)</div>
                     </Popup>
                 </Marker>
 
-                {/* End Marker (Bangalore) */}
-                <Marker position={BANGALORE_COORDS}>
+                {/* End Marker */}
+                <Marker position={endCoords}>
                     <Popup>
-                        <div className="font-bold text-sm">Bangalore (Destination)</div>
-                        <div className="text-xs text-gray-500">KR Puram Railway Station</div>
+                        <div className="font-bold text-sm">{endName} (Destination)</div>
                     </Popup>
                 </Marker>
 
-                {points.map((update) => (
+                {filteredPointsRender.map((update) => (
                     <Marker key={update.id} position={[update.coordinates.latitude, update.coordinates.longitude]}>
                         <Popup className="custom-popup min-w-[200px]">
                             <div className="p-1">
