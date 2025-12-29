@@ -5,7 +5,12 @@ const DeveloperCredit = () => {
     // Auto-hide removed as per request
 
     return (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-3 bg-dark-900/90 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full shadow-2xl transition-all duration-1000 pointer-events-auto opacity-100 translate-y-0">
+        <a
+            href="https://github.com/nkchoudhary2000"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-3 bg-dark-900/90 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full shadow-2xl transition-all duration-1000 pointer-events-auto opacity-100 translate-y-0 hover:bg-dark-800 hover:scale-105 cursor-pointer"
+        >
             {/* Logo Placeholder */}
             <div className="h-8 w-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg border border-white/20">
                 <span className="text-[10px] font-bold text-white">NIOM</span>
@@ -23,7 +28,7 @@ const DeveloperCredit = () => {
                     <span className="text-[10px] text-gray-400">@ NIOM SolutionX</span>
                 </div>
             </div>
-        </div>
+        </a>
     );
 };
 
