@@ -5,6 +5,7 @@ import MapDisplay from './components/MapDisplay';
 import TripFeed from './components/TripFeed';
 import AdminPanel from './components/AdminPanel';
 import CommentSection from './components/CommentSection';
+import VisitCounter from './components/VisitCounter';
 import { Map, LayoutDashboard, MessageSquare, Camera, ChevronUp, ChevronDown } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
@@ -146,6 +147,7 @@ function App() {
                         </div>
                     } />
                 </Routes>
+                <VisitCounter />
             </div>
         </Router>
     );
