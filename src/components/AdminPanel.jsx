@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { signInWithPopup, signOut } from 'firebase/auth';
+import { signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { collection, addDoc, getDocs, updateDoc, setDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase';
 import { Lock, LogOut, Send, Navigation, Camera, Wallet, MapPin, Edit2, Trash2, X, FileDown, FileUp, ChevronLeft, ChevronRight, Plus, Calendar, Map } from 'lucide-react';
@@ -10,6 +10,7 @@ import { migrateLegacyData } from '../utils/migration';
 
 const AdminPanel = () => {
     const [user, setUser] = useState(null);
+    const [loadingAuth, setLoadingAuth] = useState(true);
     const [formData, setFormData] = useState({
         type: 'drive',
         message: '',
@@ -63,6 +64,7 @@ const AdminPanel = () => {
             } else {
                 setUser(null);
             }
+            setLoadingAuth(false);
         });
         return () => unsubscribe();
     }, []);
@@ -170,6 +172,7 @@ const AdminPanel = () => {
 
     const handleLogin = async () => {
         try {
+            await setPersistence(auth, browserLocalPersistence);
             await signInWithPopup(auth, googleProvider);
         } catch (error) {
             console.error(error);
@@ -469,6 +472,17 @@ const AdminPanel = () => {
         };
         reader.readAsText(file);
     };
+
+    if (loadingAuth) {
+        return (
+            <div className="min-h-screen w-full flex items-center justify-center bg-dark-900 text-white">
+                <div className="flex flex-col items-center gap-4">
+                    <RefreshCw className="animate-spin text-blue-500" size={48} />
+                    <p className="text-gray-400">Verifying Access...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (!user) {
         return (
