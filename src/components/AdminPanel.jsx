@@ -31,6 +31,12 @@ const AdminPanel = () => {
     const [trips, setTrips] = useState([]);
     const [selectedTripId, setSelectedTripId] = useState(''); // Default empty, load from trips
     const [showNewTripInput, setShowNewTripInput] = useState(false);
+    // Loading States for buttons
+    const [loadingState, setLoadingState] = useState({
+        gps: false,
+        refetch: false
+    });
+
     // New Trip Form State
     const [newTripData, setNewTripData] = useState({
         name: '',
@@ -212,11 +218,15 @@ const AdminPanel = () => {
             ...prev,
             ...updates
         }));
+
+
         setStatus("Details updated!");
     };
 
     const getLocation = () => {
+
         setStatus("Fetching GPS...");
+        setLoadingState(prev => ({ ...prev, gps: true }));
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
@@ -230,17 +240,25 @@ const AdminPanel = () => {
 
                     // Fetch details using the new helper
                     await fetchLocationDetails(lat, lon);
+                    setLoadingState(prev => ({ ...prev, gps: false }));
                 },
-                (err) => setStatus("Location denied/error")
+                (err) => {
+                    setStatus("Location denied/error");
+                    setLoadingState(prev => ({ ...prev, gps: false }));
+                }
             );
+        } else {
+            setLoadingState(prev => ({ ...prev, gps: false }));
         }
     };
 
-    const handleManualRefetch = () => {
+    const handleManualRefetch = async () => {
         const lat = formData.coords?.latitude;
         const lon = formData.coords?.longitude;
         if (lat && lon) {
-            fetchLocationDetails(lat, lon);
+            setLoadingState(prev => ({ ...prev, refetch: true }));
+            await fetchLocationDetails(lat, lon);
+            setLoadingState(prev => ({ ...prev, refetch: false }));
         } else {
             alert("Please enter valid Latitude and Longitude first.");
         }
@@ -674,9 +692,11 @@ const AdminPanel = () => {
                                         {/* Refetch Button moved to input row */}
                                         <button
                                             type="button"
-                                            className="text-xs bg-green-500/20 text-green-400 px-3 py-1 rounded-full flex items-center gap-1 hover:bg-green-500/30 transition-colors"
+                                            onClick={getLocation}
+                                            disabled={loadingState.gps}
+                                            className="text-xs bg-green-500/20 text-green-400 px-3 py-1 rounded-full flex items-center gap-1 hover:bg-green-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            <Navigation size={12} /> Auto-GPS
+                                            <Navigation size={12} className={loadingState.gps ? "animate-pulse" : ""} /> Auto-GPS
                                         </button>
                                     </div>
                                 </div>
@@ -714,10 +734,11 @@ const AdminPanel = () => {
                                     <button
                                         type="button"
                                         onClick={handleManualRefetch}
+                                        disabled={loadingState.refetch}
                                         title="Refetch Details"
-                                        className="mb-[2px] p-2.5 bg-blue-500/20 text-blue-300 rounded-lg hover:bg-blue-500/30 transition-colors"
+                                        className="mb-[2px] p-2.5 bg-blue-500/20 text-blue-300 rounded-lg hover:bg-blue-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        <RefreshCw size={18} />
+                                        <RefreshCw size={18} className={loadingState.refetch ? "animate-spin" : ""} />
                                     </button>
                                 </div>
                                 <div>
