@@ -4,10 +4,13 @@ A React-based web application documenting a journey from Patna to Bangalore. Thi
 
 ## Features
 
-- **Interactive Map**: visualizes the journey route using `Leaflet` and `react-leaflet`.
-- **Trip Feed**: Displays a timeline of updates and stories from the trip.
+- **Interactive Map**: visualizes the journey route using `Leaflet` and `react-leaflet`. Dynamic path rendering based on trip updates.
+- **Trip Feed**: Displays a timeline of updates with **Interval Distance** (+X km from last stop), **Speed** (~X km/h), **Temperature**, and **AQI**.
 - **Gallery Mode**: A dedicated view for browsing trip photos.
-- **Admin Panel**: Secure interface for adding new posts and updates.
+- **Admin Panel**: Secure interface for identifying location via GPS.
+    - **Auto-Fetch**: Automatically fetches City, AQI, and Temp based on GPS.
+    - **Refetch Button**: Manually update details after editing coordinates.
+    - **Trip Management**: Create, Delete (Cascade), and Switch between multiple trips.
 - **Comments**: Interactive comment section for user engagement.
 - **Responsive Design**: Mobile-first layout that works seamlessly on desktop and mobile devices.
 
@@ -17,6 +20,7 @@ A React-based web application documenting a journey from Patna to Bangalore. Thi
 - **Styling**: Tailwind CSS, Framer Motion
 - **Map**: Leaflet, React Leaflet
 - **Backend/Database**: Firebase (Firestore, Hosting)
+- **APIs**: Open-Meteo (Temperature, AQI), Nominatim (Reverse Geocoding)
 - **Icons**: Lucide React
 
 ## Prerequisites
