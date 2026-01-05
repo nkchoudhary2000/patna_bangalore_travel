@@ -359,49 +359,47 @@ const AdminPanel = () => {
     };
 
     const handleExport = async () => {
-        setStatus("Exporting...");
+        setStatus("Creating Full Backup...");
         try {
-            // Ensure export is also sorted Ascending
-            const q = query(collection(db, "trip_updates"), orderBy("timestamp", "asc"));
-            const querySnapshot = await getDocs(q);
-            const updates = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // 1. Fetch ALL Trips
+            const tripsSnapshot = await getDocs(collection(db, "trips"));
+            const tripsData = tripsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            const headers = ['id', 'timestamp', 'type', 'message', 'locationName', 'latitude', 'longitude', 'cost', 'costCategory', 'mediaUrl', 'mediaType', 'aqi', 'temp'];
-            const csvContent = [
-                headers.join(','),
-                ...updates.map(row => {
-                    const timestamp = row.timestamp?.toDate().toISOString() || '';
-                    return [
-                        escapeCSV(row.id),
-                        escapeCSV(timestamp),
-                        escapeCSV(row.type),
-                        escapeCSV(row.message),
-                        escapeCSV(row.locationName),
-                        row.coordinates?.latitude || '',
-                        row.coordinates?.longitude || '',
-                        row.cost || 0,
-                        escapeCSV(row.costCategory),
-                        escapeCSV(row.mediaUrl),
-                        escapeCSV(row.mediaType),
-                        row.aqi || '',
-                        row.temp || ''
-                    ].join(',');
-                })
-            ].join('\n');
+            // 2. Fetch ALL Updates
+            const updatesSnapshot = await getDocs(collection(db, "trip_updates"));
+            const updatesData = updatesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            // 3. Construct Backup Object
+            const backupData = {
+                metadata: {
+                    version: "1.0",
+                    exportDate: new Date().toISOString(),
+                    totalTrips: tripsData.length,
+                    totalUpdates: updatesData.length
+                },
+                trips: tripsData,
+                updates: updatesData
+            };
+
+            // 4. Create JSON File
+            const jsonString = JSON.stringify(backupData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+
+            // 5. Download
+            const dateStr = new Date().toISOString().split('T')[0];
+            const fileName = `TravelTracker_Backup_${dateStr}.json`;
+
             const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', 'trip_updates_backup.csv');
-            link.style.visibility = 'hidden';
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            setStatus("Export Complete!");
+
+            setStatus(`Backup Complete! Saved ${fileName}`);
         } catch (error) {
             console.error("Export failed:", error);
-            setStatus("Export Failed");
+            setStatus("Backup Failed: " + error.message);
         }
     };
 
@@ -409,98 +407,64 @@ const AdminPanel = () => {
         const file = event.target.files[0];
         if (!file) return;
 
-        setStatus("Importing...");
+        setStatus("Reading Backup File...");
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const text = e.target.result;
-            const rows = text.split('\n').filter(row => row.trim() !== '');
-            // Skip header row
+            try {
+                const content = e.target.result;
+                const data = JSON.parse(content);
 
-            let successCount = 0;
-            let errorCount = 0;
+                // Basic validation
+                if (!data.trips || !data.updates) {
+                    throw new Error("Invalid Backup File: Missing trips or updates data.");
+                }
 
-            // Helper to parse CSV line respecting quotes
-            const parseCSVLine = (line) => {
-                const result = [];
-                let start = 0;
-                let insideQuotes = false;
+                setStatus(`Restoring ${data.trips.length} Trips & ${data.updates.length} Updates...`);
 
-                for (let i = 0; i < line.length; i++) {
-                    if (line[i] === '"') {
-                        insideQuotes = !insideQuotes;
-                    } else if (line[i] === ',' && !insideQuotes) {
-                        let val = line.substring(start, i);
-                        if (val.startsWith('"') && val.endsWith('"')) {
-                            val = val.slice(1, -1).replace(/""/g, '"');
+                let restoredTrips = 0;
+                let restoredUpdates = 0;
+
+                // 1. Restore Trips
+                for (const trip of data.trips) {
+                    const tripPayload = { ...trip };
+                    // Firestore timestamps handling if needed, though usually date strings from JSON
+                    if (tripPayload.createdAt && typeof tripPayload.createdAt === 'string') {
+                        tripPayload.createdAt = new Date(tripPayload.createdAt);
+                    } else if (tripPayload.createdAt && tripPayload.createdAt.seconds) {
+                        tripPayload.createdAt = new Date(tripPayload.createdAt.seconds * 1000);
+                    }
+
+                    await setDoc(doc(db, "trips", trip.id), tripPayload, { merge: true });
+                    restoredTrips++;
+                }
+
+                // 2. Restore Updates
+                for (const update of data.updates) {
+                    const updatePayload = { ...update };
+
+                    // Handle Timestamp restoration
+                    if (updatePayload.timestamp) {
+                        if (typeof updatePayload.timestamp === 'string') {
+                            updatePayload.timestamp = new Date(updatePayload.timestamp);
+                        } else if (updatePayload.timestamp.seconds) {
+                            updatePayload.timestamp = new Date(updatePayload.timestamp.seconds * 1000);
                         }
-                        result.push(val);
-                        start = i + 1;
-                    }
-                }
-                let lastVal = line.substring(start);
-                if (lastVal.startsWith('"') && lastVal.endsWith('"')) {
-                    lastVal = lastVal.slice(1, -1).replace(/""/g, '"');
-                }
-                result.push(lastVal);
-                return result;
-            };
-
-            for (let i = 1; i < rows.length; i++) {
-                try {
-                    const values = parseCSVLine(rows[i]);
-                    // Map values to object based on fixed index structure from export
-                    const id = values[0];
-                    const timestampStr = values[1];
-                    const type = values[2] || 'drive';
-                    const message = values[3] || '';
-                    const locationName = values[4] || '';
-                    const lat = parseFloat(values[5]);
-                    const lon = parseFloat(values[6]);
-                    const cost = parseFloat(values[7]) || 0;
-                    const costCategory = values[8] || 'Petrol';
-                    const mediaUrl = values[9] || '';
-                    const mediaType = values[10] || 'image';
-                    const aqi = values[11] ? parseFloat(values[11]) : null;
-                    const temp = values[12] ? parseFloat(values[12]) : null;
-
-                    const data = {
-                        type,
-                        message,
-                        locationName,
-                        coordinates: (!isNaN(lat) && !isNaN(lon)) ? { latitude: lat, longitude: lon } : null,
-                        cost,
-                        costCategory,
-                        mediaUrl,
-                        mediaType,
-                        aqi,
-                        temp
-                    };
-
-                    if (timestampStr) {
-                        data.timestamp = new Date(timestampStr);
                     }
 
-                    if (id && id.trim() !== '') {
-                        // Use setDoc with merge: true to handle both updates and restores (upsert)
-                        await setDoc(doc(db, "trip_updates", id), data, { merge: true });
-                    } else {
-                        // Create new
-                        if (!data.timestamp) data.timestamp = serverTimestamp();
-                        await addDoc(collection(db, "trip_updates"), data);
-                    }
-                    successCount++;
-                } catch (err) {
-                    console.error("Row import failed:", err);
-                    errorCount++;
-                    setStatus(`Error on row ${i}: ${err.message}`);
+                    await setDoc(doc(db, "trip_updates", update.id), updatePayload, { merge: true });
+                    restoredUpdates++;
                 }
+
+                setStatus(`Restore Complete! Trips: ${restoredTrips}, Updates: ${restoredUpdates}`);
+
+                // Reload to refresh state
+                setTimeout(() => window.location.reload(), 1500);
+
+            } catch (err) {
+                console.error("Import failed:", err);
+                setStatus("Restore Failed: " + err.message);
             }
-            if (errorCount === 0) {
-                setStatus(`Import Successful! processed ${successCount} records.`);
-            } else {
-                setStatus(`Completed with errors. Success: ${successCount}, Failed: ${errorCount}`);
-            }
-            // Reset file input
+            // Reset input
             event.target.value = null;
         };
         reader.readAsText(file);
@@ -891,13 +855,13 @@ const AdminPanel = () => {
                                 onClick={handleExport}
                                 className="flex items-center gap-1 px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20 text-xs font-semibold transition-colors"
                             >
-                                <FileDown size={14} /> Export CSV
+                                <FileDown size={14} /> Full Backup
                             </button>
                             <label className="flex items-center gap-1 px-3 py-1.5 bg-green-500/10 text-green-400 rounded-lg hover:bg-green-500/20 text-xs font-semibold transition-colors cursor-pointer">
-                                <FileUp size={14} /> Import CSV
+                                <FileUp size={14} /> Restore
                                 <input
                                     type="file"
-                                    accept=".csv"
+                                    accept=".json"
                                     onChange={handleImport}
                                     className="hidden"
                                 />
