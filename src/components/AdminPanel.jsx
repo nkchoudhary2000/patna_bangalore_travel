@@ -4,7 +4,9 @@ import { collection, addDoc, getDocs, updateDoc, setDoc, deleteDoc, doc, serverT
 import { auth, googleProvider, db } from '../firebase';
 import { Lock, LogOut, Send, Navigation, Camera, Wallet, MapPin, Edit2, Trash2, X, FileDown, FileUp, ChevronLeft, ChevronRight, Plus, Calendar, Map } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { RefreshCw } from 'lucide-react';
 import MediaCarousel from './MediaCarousel';
+import { migrateLegacyData } from '../utils/migration';
 
 const AdminPanel = () => {
     const [user, setUser] = useState(null);
@@ -18,7 +20,8 @@ const AdminPanel = () => {
         coords: null,
 
         locationName: '',
-        aqi: ''
+        aqi: '',
+        temp: ''
     });
     const [editingId, setEditingId] = useState(null);
     const [status, setStatus] = useState('');
@@ -26,7 +29,7 @@ const AdminPanel = () => {
 
     // Trip Management State
     const [trips, setTrips] = useState([]);
-    const [selectedTripId, setSelectedTripId] = useState('legacy'); // 'legacy' or trip doc ID
+    const [selectedTripId, setSelectedTripId] = useState(''); // Default empty, load from trips
     const [showNewTripInput, setShowNewTripInput] = useState(false);
     // New Trip Form State
     const [newTripData, setNewTripData] = useState({
@@ -47,6 +50,7 @@ const AdminPanel = () => {
         const unsubscribe = auth.onAuthStateChanged((u) => {
             if (u && u.email === AUTHORIZED_EMAIL || !AUTHORIZED_EMAIL.includes("@")) {
                 setUser(u);
+                migrateLegacyData(); // Check and run migration if needed once authorized
             } else if (u) {
                 setStatus("Unauthorized User");
                 auth.signOut();
@@ -60,27 +64,26 @@ const AdminPanel = () => {
     useEffect(() => {
         if (!user) return;
 
+
         // Fetch Trips
         const fetchTrips = () => {
             const q = query(collection(db, "trips"), orderBy("createdAt", "desc"));
             const unsubscribe = onSnapshot(q, (snapshot) => {
                 const t = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setTrips(t);
-                // If we have trips and current selection is legacy, maybe switch? 
-                // For now, let's stick to legacy default unless user switches.
-                // Actually, requirement: "default to latest Trip".
-                // BUT this is Admin panel. Persistent selection is better? 
-                // Let's default to the *latest created trip* if 'legacy' is currently selected AND trips exist?
-                // No, standard behavior: Default to first available or allow manual. 
-                // I'll keep 'legacy' as initial, but if they create a new one, I switch to it.
+
+                // If no trip selected, default to first one
+                if (!selectedTripId && t.length > 0) {
+                    setSelectedTripId(t[0].id);
+                }
             });
             return unsubscribe;
         };
         const unsubTrips = fetchTrips();
 
-        // Fetch all updates sorted by timestamp ASCENDING (Oldest first)
+        // Fetch all updates sorted by timestamp DESCENDING (Latest first)
         // We fetch ALL and filter client side to avoid complex querying/indexing for now
-        const q = query(collection(db, "trip_updates"), orderBy("timestamp", "asc"));
+        const q = query(collection(db, "trip_updates"), orderBy("timestamp", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setRecentUpdates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
@@ -128,13 +131,30 @@ const AdminPanel = () => {
     };
 
     const handleDeleteTrip = async () => {
-        if (selectedTripId === 'legacy') return;
+        if (!selectedTripId) return;
         const tripName = trips.find(t => t.id === selectedTripId)?.name || 'this trip';
-        if (window.confirm(`Are you sure you want to delete "${tripName}"? This will NOT delete the posts associated with it (they will become visible in Legacy), but the Trip grouping will be lost.`)) {
+
+        if (window.confirm(`Are you sure you want to delete "${tripName}"? WARNING: This will PERMANENTLY DELETE the trip AND ALL ${filteredUpdates.length} associated updates. This action cannot be undone.`)) {
+            setStatus("Deleting entire trip...");
             try {
+                // 1. Delete all updates for this trip
+                // We likely need to query all, not just recentUpdates (though recentUpdates loads all).
+                // Safest is to rely on what we have or query specifically to be sure.
+                const updatesToDelete = recentUpdates.filter(u => u.tripId === selectedTripId);
+                const batch = db.batch ? db.batch() : null; // React native compat? No, web.
+
+                // Manual delete loop if batch complex or too big, but let's try concurrent promises
+                const deletePromises = updatesToDelete.map(u => deleteDoc(doc(db, "trip_updates", u.id)));
+                await Promise.all(deletePromises);
+
+                // 2. Delete the trip doc
                 await deleteDoc(doc(db, "trips", selectedTripId));
+
                 setStatus(`Deleted trip: ${tripName}`);
-                setSelectedTripId('legacy');
+                setSelectedTripId(''); // Reset selection
+
+                // If trips remain, effect will likely set new default or we can do it:
+                // setTrips will update via listener
             } catch (e) {
                 console.error("Error deleting trip", e);
                 setStatus("Failed to delete trip");
@@ -151,52 +171,92 @@ const AdminPanel = () => {
         }
     };
 
+    // Helper to fetch details based on Lat/Lon
+    const fetchLocationDetails = async (lat, lon) => {
+        setStatus("Fetching details...");
+        let updates = {};
+
+        // 1. Reverse Geocode for Name
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+            const data = await res.json();
+            const address = data.address.city || data.address.town || data.address.village || data.display_name.split(',')[0];
+            if (address) updates.locationName = address;
+        } catch (e) {
+            console.error("Reverse geocode failed", e);
+        }
+
+        // 2. Fetch AQI
+        try {
+            const aqiRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
+            const aqiData = await aqiRes.json();
+            if (aqiData.current && aqiData.current.us_aqi) {
+                updates.aqi = aqiData.current.us_aqi;
+            }
+        } catch (aqiErr) {
+            console.error("AQI fetch failed", aqiErr);
+        }
+
+        // 3. Fetch Temperature
+        try {
+            const tempRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m`);
+            const tempData = await tempRes.json();
+            if (tempData.current && tempData.current.temperature_2m !== undefined) {
+                updates.temp = tempData.current.temperature_2m;
+            }
+        } catch (tempErr) {
+            console.error("Temp fetch failed", tempErr);
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            ...updates
+        }));
+        setStatus("Details updated!");
+    };
+
     const getLocation = () => {
-        setStatus("Fetching location...");
+        setStatus("Fetching GPS...");
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
                     const lat = position.coords.latitude;
                     const lon = position.coords.longitude;
 
-                    let address = '';
-                    try {
-                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
-                        const data = await res.json();
-                        address = data.address.city || data.address.town || data.address.village || data.display_name.split(',')[0];
-
-                        // Fetch AQI
-                        try {
-                            const aqiRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
-                            const aqiData = await aqiRes.json();
-                            if (aqiData.current && aqiData.current.us_aqi) {
-                                setFormData(prev => ({ ...prev, aqi: aqiData.current.us_aqi }));
-                            }
-                        } catch (aqiErr) {
-                            console.error("AQI fetch failed", aqiErr);
-                        }
-                    } catch (e) {
-                        console.error("Reverse geocode failed", e);
-                    }
-
                     setFormData(prev => ({
                         ...prev,
-                        locationName: address,
-                        coords: {
-                            latitude: lat,
-                            longitude: lon
-                        }
+                        coords: { latitude: lat, longitude: lon }
                     }));
-                    setStatus("Location updated!");
+
+                    // Fetch details using the new helper
+                    await fetchLocationDetails(lat, lon);
                 },
                 (err) => setStatus("Location denied/error")
             );
         }
     };
 
+    const handleManualRefetch = () => {
+        const lat = formData.coords?.latitude;
+        const lon = formData.coords?.longitude;
+        if (lat && lon) {
+            fetchLocationDetails(lat, lon);
+        } else {
+            alert("Please enter valid Latitude and Longitude first.");
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!user) return;
+
+        // Prevent posting if no trip selected (unless editing - though editing usually implies existing trip)
+        // But for safety:
+        if (!selectedTripId && !editingId) {
+            alert("Please select or create a trip first.");
+            return;
+        }
+
         setStatus(editingId ? "Updating..." : "Posting...");
 
         try {
@@ -209,14 +269,14 @@ const AdminPanel = () => {
                 costCategory: formData.costCategory,
                 coordinates: formData.coords,
                 locationName: formData.locationName,
-                aqi: formData.aqi ? Number(formData.aqi) : null
+                aqi: formData.aqi ? Number(formData.aqi) : null,
+                temp: formData.temp ? Number(formData.temp) : null
             };
 
             // Only set timestamp on creation to preserve original time
             if (!editingId) {
                 dataToSave.timestamp = serverTimestamp();
-                // Attach Trip ID (If legacy, we leave it undefined/null)
-                if (selectedTripId !== 'legacy') {
+                if (selectedTripId) {
                     dataToSave.tripId = selectedTripId;
                 }
             }
@@ -230,7 +290,7 @@ const AdminPanel = () => {
                 setStatus("Success! Posted.");
             }
 
-            setFormData({ ...formData, message: '', mediaUrl: '', cost: '', locationName: '', aqi: '' });
+            setFormData({ ...formData, message: '', mediaUrl: '', cost: '', locationName: '', aqi: '', temp: '' });
         } catch (err) {
             console.error(err);
             setStatus("Error saving update.");
@@ -247,7 +307,8 @@ const AdminPanel = () => {
             costCategory: update.costCategory || 'Petrol',
             coords: update.coordinates,
             locationName: update.locationName || '',
-            aqi: update.aqi || ''
+            aqi: update.aqi || '',
+            temp: update.temp || ''
         });
         // If editing an item from a different trip context?
         // Ideally we should switch context, but for now we trust the filter.
@@ -267,7 +328,7 @@ const AdminPanel = () => {
 
     const handleCancelEdit = () => {
         setEditingId(null);
-        setFormData({ ...formData, message: '', mediaUrl: '', cost: '', locationName: '', aqi: '' });
+        setFormData({ ...formData, message: '', mediaUrl: '', cost: '', locationName: '', aqi: '', temp: '' });
     };
 
     const escapeCSV = (str) => {
@@ -287,7 +348,7 @@ const AdminPanel = () => {
             const querySnapshot = await getDocs(q);
             const updates = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            const headers = ['id', 'timestamp', 'type', 'message', 'locationName', 'latitude', 'longitude', 'cost', 'costCategory', 'mediaUrl', 'mediaType', 'aqi'];
+            const headers = ['id', 'timestamp', 'type', 'message', 'locationName', 'latitude', 'longitude', 'cost', 'costCategory', 'mediaUrl', 'mediaType', 'aqi', 'temp'];
             const csvContent = [
                 headers.join(','),
                 ...updates.map(row => {
@@ -304,7 +365,8 @@ const AdminPanel = () => {
                         escapeCSV(row.costCategory),
                         escapeCSV(row.mediaUrl),
                         escapeCSV(row.mediaType),
-                        row.aqi || ''
+                        row.aqi || '',
+                        row.temp || ''
                     ].join(',');
                 })
             ].join('\n');
@@ -381,6 +443,7 @@ const AdminPanel = () => {
                     const mediaUrl = values[9] || '';
                     const mediaType = values[10] || 'image';
                     const aqi = values[11] ? parseFloat(values[11]) : null;
+                    const temp = values[12] ? parseFloat(values[12]) : null;
 
                     const data = {
                         type,
@@ -391,7 +454,8 @@ const AdminPanel = () => {
                         costCategory,
                         mediaUrl,
                         mediaType,
-                        aqi
+                        aqi,
+                        temp
                     };
 
                     if (timestampStr) {
@@ -447,9 +511,8 @@ const AdminPanel = () => {
 
     // Pagination Logic
     // Filter updates by selected Trip ID
-    const key = selectedTripId === 'legacy' ? 'legacy' : selectedTripId;
     const filteredUpdates = recentUpdates.filter(u => {
-        if (selectedTripId === 'legacy') return !u.tripId; // Show check if tripId is missing
+        if (!selectedTripId) return false;
         return u.tripId === selectedTripId;
     });
 
@@ -486,15 +549,15 @@ const AdminPanel = () => {
                         }}
                         className="bg-dark-900 border border-white/10 rounded-lg p-2 text-white min-w-[200px]"
                     >
-                        <option value="legacy">Patna ➜ Bangalore (Legacy)</option>
+                        {!selectedTripId && <option value="">Select a Trip</option>}
                         {trips.map(t => (
                             <option key={t.id} value={t.id}>{t.name}</option>
                         ))}
                     </select>
                     <button
                         onClick={handleDeleteTrip}
-                        disabled={selectedTripId === 'legacy'}
-                        className={`p-2 rounded-lg transition-colors ${selectedTripId === 'legacy' ? 'text-gray-600 cursor-not-allowed' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}
+                        disabled={!selectedTripId}
+                        className={`p-2 rounded-lg transition-colors ${!selectedTripId ? 'text-gray-600 cursor-not-allowed' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}
                         title="Delete this Trip"
                     >
                         <Trash2 size={18} />
@@ -528,7 +591,7 @@ const AdminPanel = () => {
                                     type="text"
                                     value={newTripData.name}
                                     onChange={(e) => setNewTripData({ ...newTripData, name: e.target.value })}
-                                    placeholder="e.g. Bangalore to Goa"
+                                    placeholder="e.g. Summer Road Trip"
                                     className="w-full bg-dark-800 border border-white/10 rounded p-2 text-sm text-white"
                                 />
                             </div>
@@ -540,7 +603,7 @@ const AdminPanel = () => {
                                         type="text"
                                         value={newTripData.startName}
                                         onChange={(e) => setNewTripData({ ...newTripData, startName: e.target.value })}
-                                        placeholder="Name (e.g. Patna)"
+                                        placeholder="Name (e.g. City A)"
                                         className="w-full bg-dark-800 border border-white/10 rounded p-1.5 text-xs text-white"
                                     />
                                     <div className="flex gap-1">
@@ -607,18 +670,20 @@ const AdminPanel = () => {
                             <div className="bg-dark-800 p-4 rounded-xl border border-white/10">
                                 <div className="flex justify-between items-center mb-2">
                                     <span className="text-sm text-gray-400">GPS Coordinates</span>
-                                    <button
-                                        type="button"
-                                        onClick={getLocation}
-                                        className="text-xs bg-green-500/20 text-green-400 px-3 py-1 rounded-full flex items-center gap-1"
-                                    >
-                                        <Navigation size={12} /> Auto-Fetch
-                                    </button>
+                                    <div className="flex gap-2">
+                                        {/* Refetch Button moved to input row */}
+                                        <button
+                                            type="button"
+                                            className="text-xs bg-green-500/20 text-green-400 px-3 py-1 rounded-full flex items-center gap-1 hover:bg-green-500/30 transition-colors"
+                                        >
+                                            <Navigation size={12} /> Auto-GPS
+                                        </button>
+                                    </div>
                                 </div>
 
-                                {/* Editable GPS Inputs */}
-                                <div className="grid grid-cols-2 gap-2 mb-3">
-                                    <div>
+                                {/* Editable GPS Inputs & Refetch */}
+                                <div className="flex gap-2 items-end mb-3">
+                                    <div className="flex-1">
                                         <label className="text-[10px] text-gray-500 block mb-1">Latitude</label>
                                         <input
                                             type="number"
@@ -632,7 +697,7 @@ const AdminPanel = () => {
                                             placeholder="0.000000"
                                         />
                                     </div>
-                                    <div>
+                                    <div className="flex-1">
                                         <label className="text-[10px] text-gray-500 block mb-1">Longitude</label>
                                         <input
                                             type="number"
@@ -646,6 +711,14 @@ const AdminPanel = () => {
                                             placeholder="0.000000"
                                         />
                                     </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleManualRefetch}
+                                        title="Refetch Details"
+                                        className="mb-[2px] p-2.5 bg-blue-500/20 text-blue-300 rounded-lg hover:bg-blue-500/30 transition-colors"
+                                    >
+                                        <RefreshCw size={18} />
+                                    </button>
                                 </div>
                                 <div>
                                     <label className="text-[10px] text-gray-500 block mb-1 flex items-center gap-1"><MapPin size={10} /> Location Name</label>
@@ -683,6 +756,18 @@ const AdminPanel = () => {
                                             </div>
                                         )}
                                     </div>
+                                </div>
+
+                                <div className="mt-3">
+                                    <label className="text-[10px] text-gray-500 block mb-1">Temperature (°C)</label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        value={formData.temp || ''}
+                                        onChange={e => setFormData({ ...formData, temp: e.target.value })}
+                                        className="w-full bg-dark-900 border border-white/10 rounded p-2 text-sm text-white"
+                                        placeholder="Temp"
+                                    />
                                 </div>
                             </div>
 
@@ -777,7 +862,7 @@ const AdminPanel = () => {
                 < div className="lg:col-span-8" >
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-bold text-gray-300">
-                            {selectedTripId === 'legacy' ? 'Legacy Updates' : trips.find(t => t.id === selectedTripId)?.name || 'Updates'}
+                            {trips.find(t => t.id === selectedTripId)?.name || 'Updates'}
                             <span className="text-sm font-normal text-gray-500 ml-2">(Total: {filteredUpdates.length})</span>
                         </h3>
                         <div className="flex gap-2">

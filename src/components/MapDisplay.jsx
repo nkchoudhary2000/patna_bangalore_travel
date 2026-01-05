@@ -24,7 +24,7 @@ function MapUpdater({ center, focusLocation, bounds }) {
     const map = useMap();
     const [initialBoundSet, setInitialBoundSet] = useState(false);
 
-    // Handle Initial Bounds (Fit Map to show Patna -> Bangalore)
+    // Handle Initial Bounds
     useEffect(() => {
         if (!initialBoundSet && bounds) {
             map.fitBounds(bounds, { padding: [50, 50] });
@@ -78,22 +78,17 @@ function ResetMapControl({ bounds }) {
     );
 }
 
-const MapDisplay = ({ focusLocation, selectedTripId = 'legacy', tripStart, tripEnd }) => {
+const MapDisplay = ({ focusLocation, selectedTripId, tripStart, tripEnd }) => {
     const [points, setPoints] = useState([]);
     // State for points only, stats derived in render
 
     // Removed specific state for stats/currentLocation to avoid synchronization issues
     const [showMobileStats, setShowMobileStats] = useState(false); // Mobile stats drawer state
 
-    // Coordinates
-    // Coordinates - Default to Patna/Bangalore if not provided
-    const PATNA_COORDS = [25.5941, 85.1376];
-    const BANGALORE_COORDS = [13.0018, 77.6892];
-
-    const startCoords = tripStart?.coords ? [tripStart.coords.latitude, tripStart.coords.longitude] : PATNA_COORDS;
-    const endCoords = tripEnd?.coords ? [tripEnd.coords.latitude, tripEnd.coords.longitude] : BANGALORE_COORDS;
-    const startName = tripStart?.name || "Patna";
-    const endName = tripEnd?.name || "Bangalore";
+    const startCoords = tripStart?.coords ? [tripStart.coords.latitude, tripStart.coords.longitude] : null;
+    const endCoords = tripEnd?.coords ? [tripEnd.coords.latitude, tripEnd.coords.longitude] : null;
+    const startName = tripStart?.name || "Start";
+    const endName = tripEnd?.name || "Destination";
 
     // Calculate distance between two points (Haversine formula) in km
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -130,36 +125,43 @@ const MapDisplay = ({ focusLocation, selectedTripId = 'legacy', tripStart, tripE
     // We need to re-filter here or store filtered in state? 
     // Optimization: Store filtered points in state. For now, just re-filter (it's small data).
     const filteredPointsRender = points.filter(p => {
-        if (selectedTripId === 'legacy') return !p.tripId;
+        if (!selectedTripId) return false;
         return p.tripId === selectedTripId;
     });
 
-    // Traveled Path: Start -> ...Points
-    const traveledPath = [startCoords, ...filteredPointsRender.map(p => [p.coordinates.latitude, p.coordinates.longitude])];
+    // Traveled Path: Filter out nulls
+    const traveledPath = [startCoords, ...filteredPointsRender.map(p => [p.coordinates.latitude, p.coordinates.longitude])].filter(Boolean);
 
-    // Remaining Path: Last Point (or Start) -> End
+    // Remaining Path: Last Point (or Start) -> End (Filter nulls)
     const lastPoint = filteredPointsRender.length > 0
         ? [filteredPointsRender[filteredPointsRender.length - 1].coordinates.latitude, filteredPointsRender[filteredPointsRender.length - 1].coordinates.longitude]
         : startCoords;
-    const remainingPath = [lastPoint, endCoords];
+    const remainingPath = [lastPoint, endCoords].filter(Boolean);
 
-    // Initial Bounds: Start to End
-    const initialBounds = L.latLngBounds([startCoords, endCoords]);
+    // Initial Bounds: Filter nulls
+    const validBounds = [startCoords, endCoords, ...filteredPointsRender.map(p => [p.coordinates.latitude, p.coordinates.longitude])].filter(Boolean);
+    const initialBounds = validBounds.length > 0 ? L.latLngBounds(validBounds) : null;
 
     // --- On-the-fly Stats Calculation ---
     // This ensures stats are always in sync with the filtered points and start/end props
+    // --- On-the-fly Stats Calculation ---
+    // This ensures stats are always in sync with the filtered points and start/end props
     let traveledDist = 0;
-    let current = startCoords;
+    let current = startCoords || (filteredPointsRender.length > 0 ? [filteredPointsRender[0].coordinates.latitude, filteredPointsRender[0].coordinates.longitude] : null);
 
-    filteredPointsRender.forEach(p => {
-        const next = [p.coordinates.latitude, p.coordinates.longitude];
-        traveledDist += calculateDistance(current[0], current[1], next[0], next[1]);
-        current = next;
-    });
+    if (current) {
+        filteredPointsRender.forEach(p => {
+            const next = [p.coordinates.latitude, p.coordinates.longitude];
+            if (current && next) {
+                traveledDist += calculateDistance(current[0], current[1], next[0], next[1]);
+            }
+            current = next;
+        });
+    }
 
-    const remainingDist = calculateDistance(current[0], current[1], endCoords[0], endCoords[1]);
+    const remainingDist = (current && endCoords) ? calculateDistance(current[0], current[1], endCoords[0], endCoords[1]) : 0;
     const totalDist = traveledDist + remainingDist;
-    const finalTotal = totalDist === 0 ? calculateDistance(startCoords[0], startCoords[1], endCoords[0], endCoords[1]) : totalDist;
+    const finalTotal = totalDist === 0 && startCoords && endCoords ? calculateDistance(startCoords[0], startCoords[1], endCoords[0], endCoords[1]) : totalDist;
 
     const stats = {
         traveled: Math.round(traveledDist),
@@ -172,6 +174,25 @@ const MapDisplay = ({ focusLocation, selectedTripId = 'legacy', tripStart, tripE
         ? [filteredPointsRender[filteredPointsRender.length - 1].coordinates.latitude, filteredPointsRender[filteredPointsRender.length - 1].coordinates.longitude]
         : startCoords;
     // ------------------------------------
+
+    // If no trip selected, just show base map centered on India (or default)
+    if (!selectedTripId) {
+        return (
+            <div className="h-full w-full relative">
+                <MapContainer
+                    center={[22.5937, 78.9629]} // Center of India approximately
+                    zoom={5}
+                    className="h-full w-full outline-none"
+                    zoomControl={false}
+                >
+                    <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                    />
+                </MapContainer>
+            </div>
+        );
+    }
 
     return (
         <div className="h-full w-full relative">
@@ -365,6 +386,11 @@ const MapDisplay = ({ focusLocation, selectedTripId = 'legacy', tripStart, tripE
                                                         update.aqi <= 200 ? 'text-red-600' :
                                                             'text-purple-600'
                                         }>{update.aqi}</span>
+                                    </div>
+                                )}
+                                {update.temp && (
+                                    <div className="mt-1 text-[10px] font-bold text-gray-300">
+                                        Temp: <span className="text-blue-300">{update.temp}°C</span>
                                     </div>
                                 )}
                             </div>

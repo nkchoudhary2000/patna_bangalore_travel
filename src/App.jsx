@@ -20,7 +20,7 @@ function App() {
     const [focusLocation, setFocusLocation] = useState(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [trips, setTrips] = useState([]);
-    const [selectedTripId, setSelectedTripId] = useState('legacy');
+    const [selectedTripId, setSelectedTripId] = useState('');
 
     useEffect(() => {
         const q = query(collection(db, "trips"), orderBy("createdAt", "desc"));
@@ -41,10 +41,9 @@ function App() {
                 // So on first load, we switch.
                 // If I select "Legacy" manually later, I don't want it to auto-switch back.
                 // Can't easily distinguish "initialized legacy" vs "user selected legacy".
-                // I'll just check if t.length > 0 AND trips state was empty before?
                 // Simple approach: Use a "loading" state or distinct initial state.
                 // But for now:
-                // Assuming "Patna -> Bangalore" is the *oldest*.
+                // Assuming this is the *oldest*.
                 // If we have new trips, we probably want to see them.
             }
         });
@@ -53,13 +52,10 @@ function App() {
 
     // Effect to set default trip once trips are loaded
     useEffect(() => {
-        if (trips.length > 0 && selectedTripId === 'legacy') {
-            // We might want to switch to the latest trip?
-            // If 'legacy' is truly intended, this might be annoying.
-            // But given requirement "last trip always display", I should populate it.
+        if (trips.length > 0 && !selectedTripId) {
             setSelectedTripId(trips[0].id);
         }
-    }, [trips]);
+    }, [trips, selectedTripId]);
 
     // Handle initial map load or specific focus
     const handleLocationSelect = (loc) => {

@@ -16,9 +16,7 @@ const AnimatedDropdown = ({ trips, selectedTripId, onSelect }) => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const selectedTripName = selectedTripId === 'legacy'
-        ? 'Patna ➜ Bangalore (Old)'
-        : trips.find(t => t.id === selectedTripId)?.name || 'Select Trip';
+    const selectedTripName = trips.find(t => t.id === selectedTripId)?.name || 'Select a Trip';
 
     return (
         <div className="relative group" ref={dropdownRef}>
@@ -82,32 +80,11 @@ const AnimatedDropdown = ({ trips, selectedTripId, onSelect }) => {
 
                     <div className="h-px bg-white/10 my-1 mx-2"></div>
 
-                    {/* Legacy Option */}
-                    <button
-                        onClick={() => {
-                            onSelect('legacy');
-                            setIsOpen(false);
-                        }}
-                        className={`
-                            w-full text-left px-3 py-3 rounded-lg flex items-center justify-between group/item transition-all
-                            ${selectedTripId === 'legacy' ? 'bg-purple-500/10' : 'hover:bg-white/5'}
-                        `}
-                    >
-                        <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-full ${selectedTripId === 'legacy' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-800 text-gray-500 group-hover/item:text-gray-300'}`}>
-                                <Map size={16} />
-                            </div>
-                            <div>
-                                <div className={`font-semibold text-sm ${selectedTripId === 'legacy' ? 'text-purple-400' : 'text-gray-300'}`}>
-                                    Patna ➜ Bangalore
-                                </div>
-                                <div className="text-[10px] text-gray-500">
-                                    Legacy Data (Old)
-                                </div>
-                            </div>
+                    {trips.length === 0 && (
+                        <div className="px-4 py-4 text-center text-gray-500 text-sm">
+                            No trips yet.
                         </div>
-                        {selectedTripId === 'legacy' && <Check size={16} className="text-purple-400" />}
-                    </button>
+                    )}
                 </div>
             </div>
         </div>

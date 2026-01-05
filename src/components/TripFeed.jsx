@@ -5,7 +5,7 @@ import MediaCarousel from './MediaCarousel';
 import { MapPin, Navigation, Coffee, Bed, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const TripFeed = ({ onLocationSelect, selectedTripId = 'legacy' }) => {
+const TripFeed = ({ onLocationSelect, selectedTripId }) => {
     const [updates, setUpdates] = useState([]);
 
     useEffect(() => {
@@ -23,7 +23,7 @@ const TripFeed = ({ onLocationSelect, selectedTripId = 'legacy' }) => {
 
     // Filter updates based on selected Trip
     const filteredUpdates = updates.filter(post => {
-        if (selectedTripId === 'legacy') return !post.tripId; // Legacy posts have no tripId
+        if (!selectedTripId) return false;
         return post.tripId === selectedTripId;
     });
 
@@ -37,6 +37,44 @@ const TripFeed = ({ onLocationSelect, selectedTripId = 'legacy' }) => {
     };
 
     const totalCost = filteredUpdates.reduce((acc, curr) => acc + (Number(curr.cost) || 0), 0);
+
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+        const R = 6371; // Radius of the earth in km
+        const dLat = (lat2 - lat1) * (Math.PI / 180);
+        const dLon = (lon2 - lon1) * (Math.PI / 180);
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // Distance in km
+    };
+
+    const getSpeed = (currentPost, prevPost) => {
+        if (!currentPost?.coordinates || !prevPost?.coordinates || !currentPost.timestamp || !prevPost.timestamp) return null;
+
+        const dist = calculateDistance(
+            currentPost.coordinates.latitude, currentPost.coordinates.longitude,
+            prevPost.coordinates.latitude, prevPost.coordinates.longitude
+        );
+
+        const timeDiffHours = (currentPost.timestamp.toDate() - prevPost.timestamp.toDate()) / (1000 * 60 * 60);
+
+        const speed = dist / timeDiffHours;
+        // Filter realistic speeds (e.g., 1 to 150 km/h) to avoid GPS drift noise on stops
+        return speed > 1 && speed < 180 ? Math.round(speed) : null;
+    };
+
+    const getDistanceFromPrev = (currentPost, prevPost) => {
+        if (!currentPost?.coordinates || !prevPost?.coordinates) return null;
+        const dist = calculateDistance(
+            currentPost.coordinates.latitude, currentPost.coordinates.longitude,
+            prevPost.coordinates.latitude, prevPost.coordinates.longitude
+        );
+        if (dist < 0.1) return null; // Ignore tiny movements (less than 100m)
+        if (dist < 1) return `${Math.round(dist * 1000)} m`;
+        return `${Math.round(dist)} km`;
+    };
 
     // Helper to request location focus
     const handleCardClick = (post) => {
@@ -133,6 +171,30 @@ const TripFeed = ({ onLocationSelect, selectedTripId = 'legacy' }) => {
                                                 'text-purple-400'
                                     }`}>
                                     AQI {post.aqi}
+                                </span>
+                            </div>
+                        )}
+
+                        {post.temp && (
+                            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-dark-900/50 border border-white/5 mr-2">
+                                <span className="text-[10px] font-bold text-blue-200">
+                                    {post.temp}°C
+                                </span>
+                            </div>
+                        )}
+
+                        {index < filteredUpdates.length - 1 && getSpeed(post, filteredUpdates[index + 1]) && (
+                            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-dark-900/50 border border-white/5 mr-2">
+                                <span className="text-[10px] font-bold text-purple-300">
+                                    ~{getSpeed(post, filteredUpdates[index + 1])} km/h
+                                </span>
+                            </div>
+                        )}
+
+                        {index < filteredUpdates.length - 1 && getDistanceFromPrev(post, filteredUpdates[index + 1]) && (
+                            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-dark-900/50 border border-white/5 mr-2">
+                                <span className="text-[10px] font-bold text-cyan-300">
+                                    +{getDistanceFromPrev(post, filteredUpdates[index + 1])}
                                 </span>
                             </div>
                         )}
